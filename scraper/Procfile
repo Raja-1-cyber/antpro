@@ -1,0 +1,1 @@
+worker: python cricket_scraper.py

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: antpro-web
+    runtime: node
+    plan: free
+    buildCommand: "echo 'static node app — no build'"
+    startCommand: "node server.mjs"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+
+  - type: worker
+    name: antpro-scraper
+    runtime: python
+    plan: free
+    rootDir: scraper
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python cricket_scraper.py"
+    envVars:
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: POLL_INTERVAL
+        value: "5"

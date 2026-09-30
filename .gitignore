@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+serviceAccountKey.json
+scraper/serviceAccountKey.json
+scraper/.env
+.DS_Store
