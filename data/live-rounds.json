@@ -1,0 +1,48 @@
+{
+  "andar-bahar": {
+    "gameKey": "andar-bahar",
+    "roundId": "R-MUO9JN3C",
+    "phase": "betting",
+    "timer": 16,
+    "duration": 30,
+    "lockSeconds": 5,
+    "forcedWinner": null,
+    "startedAt": 1790782301352,
+    "betTimer": 11
+  },
+  "lucky7": {
+    "gameKey": "lucky7",
+    "roundId": "R-MUO9JQ5O",
+    "phase": "locked",
+    "timer": 4,
+    "duration": 15,
+    "lockSeconds": 4,
+    "forcedWinner": null,
+    "startedAt": 1790782305324,
+    "betTimer": 0,
+    "lockedAt": 1790782316324
+  },
+  "teen-patti": {
+    "gameKey": "teen-patti",
+    "roundId": "R-MUO9JNUB",
+    "phase": "betting",
+    "timer": 6,
+    "duration": 20,
+    "lockSeconds": 4,
+    "forcedWinner": null,
+    "startedAt": 1790782302323,
+    "betTimer": 2
+  },
+  "dragon-tiger": {
+    "gameKey": "dragon-tiger",
+    "roundId": "R-MUO9JQ5P",
+    "phase": "locked",
+    "timer": 4,
+    "duration": 15,
+    "lockSeconds": 4,
+    "forcedWinner": null,
+    "startedAt": 1790782305325,
+    "betTimer": 1,
+    "lockedAt": 1790782316325
+  }
+}
