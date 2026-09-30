@@ -817,27 +817,69 @@ function rules(){
 
 /* ===== IN PLAY ===== */
 
-/* ===== LIVE CRICKET (free SportScore API — no key) ===== */
+/* ===== LIVE CRICKET (Firebase scraper first, SportScore fallback) ===== */
+function firebaseSessionsToList(sessions, teamName='TEAM'){
+  return Object.entries(sessions||{}).map(([key,s])=>({
+    name: key.endsWith('_over') ? `${key.split('_')[0]} OVER RUN ${(teamName||'TEAM').slice(0,8).toUpperCase()}` : key.replaceAll('_',' ').toUpperCase(),
+    not: s?.no_run ?? s?.not ?? '—',
+    yes: s?.yes_run ?? s?.yes ?? '—',
+    rate: s?.rate ?? '—',
+    status: s?.status || 'SUSPENDED'
+  }));
+}
+
+function normalizeFirebaseMatch(id, m){
+  const teams=String(m?.teams||'Unknown v Unknown');
+  const parts=teams.split(/\s+v(?:s)?\.?\s+/i);
+  const score=String(m?.score||'—');
+  const scoreParts=score.split(/\s+-\s+/);
+  const status=String(m?.status||'').toLowerCase();
+  return {
+    id: String(id),
+    name: teams,
+    home: parts[0]||teams,
+    away: parts.slice(1).join(' v ')||'',
+    homeScore: scoreParts[0]||'—',
+    awayScore: scoreParts[1]||'—',
+    score,
+    status,
+    statusText: status,
+    time: m?.updated_at ? new Date(m.updated_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
+    competition: m?.competition||'',
+    live: status==='live',
+    sessions: m?.sessions||{}
+  };
+}
+
 async function fetchLiveCricket(){
   state.liveMatchesLoading = true;
   state.liveMatchesError = '';
   try{
-    const res = await fetch('/api/cricket/matches',{cache:'no-store'});
-    if(!res.ok) throw new Error('API '+res.status);
-    const data = await res.json();
-    const list = (data.matches || []).map((m,i)=>({
-      id: i,
-      name: (m.home||'?') + ' v ' + (m.away||'?'),
-      home: m.home||'',
-      away: m.away||'',
-      homeScore: m.home_score||'—',
-      awayScore: m.away_score||'—',
-      status: (m.status||'').toLowerCase(),
-      statusText: m.status_text||m.status||'',
-      time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
-      competition: m.competition||'',
-      live: (m.status||'').toLowerCase()==='live'
-    }));
+    let list=[];
+    const firebaseRes = await fetch('/api/firebase/live',{cache:'no-store'});
+    if(firebaseRes.ok){
+      const firebaseData=await firebaseRes.json();
+      list=Object.entries(firebaseData.live_matches||{}).map(([id,m])=>normalizeFirebaseMatch(id,m));
+    }
+    if(!list.length){
+      const res = await fetch('/api/cricket/matches',{cache:'no-store'});
+      if(!res.ok) throw new Error('live feed API '+res.status);
+      const data = await res.json();
+      list = (data.matches || []).map((m,i)=>({
+        id: i,
+        name: (m.home||'?') + ' v ' + (m.away||'?'),
+        home: m.home||'',
+        away: m.away||'',
+        homeScore: m.home_score||'—',
+        awayScore: m.away_score||'—',
+        status: (m.status||'').toLowerCase(),
+        statusText: m.status_text||m.status||'',
+        time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
+        competition: m.competition||'',
+        live: (m.status||'').toLowerCase()==='live',
+        sessions: {}
+      }));
+    }
     // live first, then upcoming, then finished
     list.sort((a,b)=>{
       const rank = s => s==='live'?0:s==='upcoming'?1:2;
@@ -846,7 +888,7 @@ async function fetchLiveCricket(){
     state.liveMatches = list;
   }catch(e){
     state.liveMatchesError = 'Live feed temporarily unavailable';
-    console.warn('SportScore fetch failed', e);
+    console.warn('Firebase/SportScore fetch failed', e);
   }
   state.liveMatchesLoading = false;
   if(state.view==='inplay'||state.view==='match') render();
@@ -873,7 +915,7 @@ function inplay(){
   return `${topBtn()}
   <div class="view-title">IN PLAY — LIVE CRICKET</div>
   <div style="padding:6px 8px;font-size:10px;color:#666;background:#fff;border-bottom:1px solid #eee">
-    Real live scores via free feed · auto-refresh
+    Live scores + sessions via Firebase scraper · auto-refresh
     <button onclick="fetchLiveCricket();toast('Refreshing…')" style="float:right;background:var(--gold);color:#fff;border:0;padding:3px 8px;font-size:10px;border-radius:3px;cursor:pointer">↻ Refresh</button>
   </div>
   ${state.liveMatchesLoading?'<div style="padding:16px;text-align:center;color:#888">Loading live matches…</div>':''}
@@ -894,6 +936,15 @@ async function fetchCricketSessions(matchName){
   if(!matchName||state.liveSessionsLoading)return;
   state.liveSessionsLoading=true;
   try{
+    const firebaseMatch=state.liveMatches.find(m=>m.name===matchName);
+    const firebaseList=firebaseSessionsToList(firebaseMatch?.sessions, firebaseMatch?.home);
+    if(firebaseList.length){
+      state.liveSessions=firebaseList;
+      state.liveSessionsKey=matchName;
+      state.liveSessionsLoading=false;
+      if(state.view==='match')render();
+      return;
+    }
     const res=await fetch('/api/cricket/sessions?match='+encodeURIComponent(matchName),{cache:'no-store'});
     if(!res.ok)throw new Error('session api '+res.status);
     const data=await res.json();state.liveSessions=data.sessions||[];state.liveSessionsKey=matchName;
