@@ -1,2 +1,42 @@
-# antpro
-AntPro demo betting portal - site + live cricket scraper
+# AntPro
+
+Demo mobile betting portal (coins only) + live cricket scraper → Firebase.
+
+## Repo
+https://github.com/Raja-1-cyber/antpro
+
+## Firebase Realtime Database Rules (paste + Publish)
+
+```json
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "live_matches": { ".read": true, ".write": false },
+    "users": { ".read": true, ".write": false },
+    "meta": { ".read": true, ".write": false }
+  }
+}
+```
+
+Database URL:
+`https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app`
+
+## Run local
+```bash
+node server.mjs
+# scraper:
+cd scraper && pip install -r requirements.txt && python cricket_scraper.py
+```
+
+## Render
+See `DEPLOY_RENDER.md`
+
+## Demo logins
+- Player: P2001 / play123
+- Agent: A1001 / agent123
+- Master: MASTER / master123
+- Super: SUPER / super123
+- Controller: /x9k2-ns-ctrl
+
+**Note:** Upload full project from `antpro-complete.zip` if any large files (app.js, assets) are missing — GitHub web UI → Upload files.
