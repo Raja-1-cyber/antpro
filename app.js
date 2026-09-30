@@ -263,7 +263,7 @@ setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].in
 
 
 const state={
-  view:'home',menu:false,loggedIn:location.pathname!=='/login',
+  view:'home',menu:false,loggedIn:location.pathname!=='/login' && !!JSON.parse(sessionStorage.getItem('antpro_user')||'null'),
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
