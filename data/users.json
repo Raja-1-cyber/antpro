@@ -17,7 +17,10 @@
       "commission": 5,
       "share": 95,
       "superId": "SUPER",
-      "agents": ["A1001", "A1002"],
+      "agents": [
+        "A1001",
+        "A1002"
+      ],
       "status": "active"
     },
     "MASTER2": {
@@ -43,7 +46,10 @@
       "commission": 10,
       "share": 20,
       "masterId": "MASTER",
-      "players": ["P2001", "P2002"],
+      "players": [
+        "P2001",
+        "P2002"
+      ],
       "status": "active"
     },
     "A1002": {
@@ -55,7 +61,9 @@
       "commission": 8,
       "share": 15,
       "masterId": "MASTER",
-      "players": ["P2003"],
+      "players": [
+        "P2003"
+      ],
       "status": "active"
     }
   },

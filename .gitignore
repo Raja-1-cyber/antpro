@@ -2,8 +2,12 @@ node_modules/
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+
+# secrets — never commit
 .env
+scraper/.env
 serviceAccountKey.json
 scraper/serviceAccountKey.json
-scraper/.env
-.DS_Store
+**/serviceAccountKey.json
+**/firebase-adminsdk*.json

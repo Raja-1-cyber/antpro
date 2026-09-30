@@ -1,16 +1,52 @@
 {
   "routes": [
-    {"path": "/", "title": "AntPro Home"},
-    {"path": "/login", "title": "Login"},
-    {"path": "/rules", "title": "Rules and Regulation"},
-    {"path": "/hierarchy", "title": "Master and Agent Hierarchy"},
-    {"path": "/inplay", "title": "In Play Cricket"},
-    {"path": "/casino", "title": "Casino Games"},
-    {"path": "/andar-bahar", "title": "Andar Bahar"},
-    {"path": "/lucky7", "title": "Lucky 7"},
-    {"path": "/teen-patti", "title": "Teen Patti"},
-    {"path": "/dragon-tiger", "title": "Dragon Tiger"},
-    {"path": "/ledger", "title": "My Ledger"},
-    {"path": "/password", "title": "Personal Information"}
+    {
+      "path": "/",
+      "title": "AntPro Home"
+    },
+    {
+      "path": "/login",
+      "title": "Login"
+    },
+    {
+      "path": "/rules",
+      "title": "Rules and Regulation"
+    },
+    {
+      "path": "/hierarchy",
+      "title": "Master and Agent Hierarchy"
+    },
+    {
+      "path": "/inplay",
+      "title": "In Play Cricket"
+    },
+    {
+      "path": "/casino",
+      "title": "Casino Games"
+    },
+    {
+      "path": "/andar-bahar",
+      "title": "Andar Bahar"
+    },
+    {
+      "path": "/lucky7",
+      "title": "Lucky 7"
+    },
+    {
+      "path": "/teen-patti",
+      "title": "Teen Patti"
+    },
+    {
+      "path": "/dragon-tiger",
+      "title": "Dragon Tiger"
+    },
+    {
+      "path": "/ledger",
+      "title": "My Ledger"
+    },
+    {
+      "path": "/password",
+      "title": "Personal Information"
+    }
   ]
 }

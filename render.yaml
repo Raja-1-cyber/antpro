@@ -1,4 +1,5 @@
 services:
+  # Main AntPro website
   - type: web
     name: antpro-web
     runtime: node
@@ -13,6 +14,7 @@ services:
       - key: FIREBASE_DATABASE_URL
         sync: false
 
+  # Live cricket scraper → Firebase (24/7 worker)
   - type: worker
     name: antpro-scraper
     runtime: python

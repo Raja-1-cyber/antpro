@@ -1,0 +1,81 @@
+/* Small refinements on top of main styles */
+.content small{font-weight:600}
+.login,.login input,.login button,.login footer,.login h2{font-weight:400}
+
+/* Reference-tuned live-card header: cards stay at the upper-left on every game. */
+.game-card-strip{background:#080808;border-top:1px solid #6f5a09;border-bottom:1px solid #6f5a09;min-height:70px;padding:5px 10px;display:flex;align-items:center;justify-content:flex-start;gap:10px}
+.game-card-strip-label{display:flex;flex-direction:column;gap:4px;color:#ffe566;font-size:9px;font-weight:700;min-width:62px}
+.live-pill{display:inline-block;background:#9b1515;color:#fff;border-radius:10px;padding:2px 6px;font-size:8px;width:max-content}
+.game-card-strip-cards{display:flex;justify-content:flex-start;align-items:center;gap:5px;flex:0 0 auto}.game-card-strip-cards .p-card{transform:scale(.82);transform-origin:left center;margin:-4px -2px -4px 0}
+.cards-zone{padding-bottom:58px}
+.live-video-stage{min-height:330px!important;background:#000;position:relative;overflow:hidden}
+.always-spinner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;pointer-events:none}
+.always-spinner .spinner{width:48px;height:48px;border-width:5px;border-color:#343434;border-top-color:#f4f4f4;animation:spin 1s linear infinite;opacity:.95}
+.game-screen .spin-overlay{background:transparent;z-index:3}.game-screen .spin-overlay .spinner{width:52px;height:52px}
+
+/* Session markets: two clear, reference-coloured YES/NO boxes. */
+.session-market{display:grid;grid-template-columns:1fr 1fr;gap:4px;min-width:150px}
+.session-market button{border:0;border-radius:3px;padding:6px 4px;font-size:10px;font-weight:700;line-height:1.05;cursor:pointer;color:#fff}
+.session-market .no-box{background:#1a65a8}.session-market .yes-box{background:#b4232e}
+.session-market button:disabled{background:#a9a9a9;color:#f7f7f7;cursor:not-allowed;opacity:.9}
+.session-market small{display:block;font-size:9px;margin-top:2px;font-weight:700}
+.session-row .sus{min-width:52px;text-align:center;font-weight:700;font-size:9px}
+@media(max-width:390px){.game-card-strip{min-height:64px;padding:4px 8px;gap:8px}.game-card-strip-label{min-width:58px}.game-card-strip-cards .p-card{transform:scale(.74);margin:-8px -4px -8px 0}.live-video-stage{min-height:330px!important}.session-market{min-width:142px;gap:3px}.session-market button{padding:6px 2px;font-size:9px}}
+
+.stake-control{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;background:#262626;border-bottom:1px solid #454545;color:#ffe566;font-size:9px;font-weight:700}.stake-control label{flex:1}.stake-control input{width:104px;background:#fff;color:#111;border:1px solid #b89412;border-radius:3px;padding:5px 7px;font-size:12px;font-weight:700;text-align:right}
+
+/* Recording parity: persistent site chrome at 384px mobile width. */
+.topbar{height:36px;padding:0 8px;background:linear-gradient(180deg,#8f7200,#725300);align-items:center;justify-content:space-between;position:relative}
+.brand-logo{width:102px;height:32px;display:flex;align-items:center;overflow:hidden}.brand-logo img{width:101px;height:33px;object-fit:cover;display:block}
+.topbar .user{flex:1;text-align:center;font-size:11px;line-height:1;color:#fff}.topbar .user strong{font-size:11px;font-weight:700}
+.header-menu{border:0;background:transparent;color:#fff;font-size:21px;line-height:1;padding:3px 0 3px 10px;cursor:pointer}
+.chips-bar{height:28px;background:#fff;color:#222;text-align:center;padding:6px 0 4px;font-size:12px;border-bottom:1px solid #ddd}.chips-bar .expo{color:#c40000}
+.marquee-bar{height:22px;padding:2px 0;background:#080808;color:#fff;border-bottom:0;font-size:12px;line-height:18px}.marquee-bar span{animation:marq 13s linear infinite}
+.home-grid{grid-template-columns:1fr 1fr;gap:0 0;padding:4px 14px 30px;background:#eee}.home-tile{min-height:138px}.home-tile .icon-wrap{width:126px;height:126px;margin:0 auto 1px;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}.home-tile .icon-wrap img{width:100%;height:100%;object-fit:cover;border:0;outline:0;mix-blend-mode:multiply}.home-tile .icon-wrap .emoji-big{border:0;background:transparent;box-shadow:none}.home-tile label{font-size:11px;font-weight:400;color:#111;text-transform:none;letter-spacing:0}
+.content{padding-bottom:0}.bottomnav{display:none}
+.game-screen{min-height:calc(100vh - 86px);background:#000}.game-top{height:29px;padding:5px 8px;background:#8b6500;font-size:11px;color:#fff}.game-top .g-title{color:#fff;font-weight:700}.game-card-strip{min-height:72px;background:#000;border-top:1px solid #9a8700;border-bottom:0;padding:2px 3px;gap:4px}.game-card-strip-label{min-width:34px;color:#fff;font-size:10px}.game-card-strip-label .live-pill{display:none}.game-card-strip-cards .p-card{transform:scale(.72);transform-origin:left top;margin:-4px -4px -10px 0}.live-video-stage{min-height:330px!important}
+.game-screen + .back-btn,.game-screen~.back-btn{display:none}
+
+/* Recording gameplay composition: one card block at the upper-left of the black live stage. */
+.game-card-strip{display:none}
+.game-live-cards{position:absolute;left:0;top:0;z-index:2;color:#fff;text-align:left;min-width:130px}
+.live-side-label{font-size:12px;line-height:15px;color:#fff;margin:0 0 1px 2px}
+.game-live-cards .card-pair{gap:9px;margin:0 0 4px 10px;justify-content:flex-start}
+.game-live-cards .p-card{width:31px;height:38px;border-radius:0;font-size:15px;line-height:13px;box-shadow:none}
+.game-live-cards .p-card small{font-size:11px}
+.live-video-stage .always-spinner{top:50%;z-index:1}
+
+/* Final game-control parity with the supplied Andar Bahar frame. */
+.marquee-bar span{animation:marq 13s linear infinite;padding-left:100%}
+.game-screen .stake-control{display:none}
+.game-screen .bet-locks{background:#eee}
+.game-screen .bet-lock-row{min-height:43px;background:#aaa;border-bottom:1px solid #fff}
+.game-screen .bet-lock-row .side{color:#111;font-size:13px;padding:10px 12px}
+.game-screen .bet-lock-row .amt{width:48px;color:#c40000;font-size:13px}
+.game-screen .bet-lock-row .lock{width:128px;min-height:43px;padding:10px;background:#765300;color:#fff}
+.game-screen .bet-lock-row .lock.back-btn-g{background:#765300;font-size:17px;font-weight:700}
+.completed-bets{width:max-content;margin:10px auto 3px;background:#765300;color:#fff;padding:7px 9px;border-radius:2px;font-size:12px;font-weight:700}
+.game-screen .result-heading{display:flex;justify-content:space-between;text-align:left;padding:7px 9px;background:#765300}
+.game-screen .last-result{min-height:40px;padding:8px 10px;background:#aaa;justify-content:flex-end;gap:5px}
+.game-screen .result-dot{width:24px;height:24px;background:#0d5b9a;font-size:12px}
+
+.live-video-stage{min-height:350px!important}
+@media(max-width:390px){.live-video-stage{min-height:350px!important}}
+
+/* Recording casino lobby parity. */
+.casino-section{padding:0 40px 20px;background:#eee}
+.casino-section h3{margin:0 -40px 8px;padding:6px 0;background:#777;color:#fff;text-align:center;font-size:13px;font-weight:400}
+.casino-grid{grid-template-columns:repeat(2,148px);gap:10px}
+.casino-grid.virtual-grid .casino-tile:nth-child(3){grid-column:1/-1;justify-self:center}
+.casino-tile{width:148px;height:150px;aspect-ratio:auto;padding:0;border:0;border-radius:3px;background:transparent;box-shadow:none;overflow:hidden}
+.casino-art{display:block;width:148px;height:150px;object-fit:cover}
+.casino-tile .brand,.casino-tile .girl,.casino-tile .gname{display:none}
+
+/* Final polish: transparent home artwork and a never-stalling scrolling announcement. */
+.home-tile .icon-wrap img{object-fit:contain;mix-blend-mode:normal;background:transparent;border:0;box-shadow:none}
+.marquee-bar span{padding-left:0;animation:marqClean 13s linear infinite;will-change:transform}
+@keyframes marqClean{0%{transform:translateX(0)}100%{transform:translateX(-33.3333%)}}
+
+/* Professional session stake controls: virtual/paper coins only. */
+.session-stakebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;background:#f7f7f7;border-bottom:1px solid #ddd;color:#333;font-size:10px}
+.session-stakebar span{flex:1;min-width:130px}.session-stakebar label{font-size:9px;font-weight:700;color:#666}.session-stakebar input{width:76px;padding:5px 6px;border:1px solid #aaa;border-radius:3px;text-align:right;font-weight:700}.session-stakebar small{width:100%;color:#777;font-size:9px}
