@@ -1,7 +1,7 @@
 :root{
   --gold:#9a8700;--gold2:#c9a336;--brown:#5c3d1e;--header:#8b7a00;
   --ink:#222;--bg:#f0f0f0;--white:#fff;
-  font-family:Arial,Helvetica,sans-serif;font-size:12px;color:var(--ink);
+  font-family:Roboto,Arial,Helvetica,sans-serif;font-size:12px;color:var(--ink);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#111;min-height:100vh}
@@ -44,20 +44,143 @@ body{background:#111;min-height:100vh}
 .menu-btn{background:var(--gold);color:#fff;border:0;padding:7px 14px;font-weight:700;font-size:12px;margin:8px;border-radius:4px}
 .back-btn{display:block;width:calc(100% - 16px);margin:10px 8px;background:var(--gold);color:#fff;border:0;padding:10px;font-weight:700;font-size:12px;text-align:center;border-radius:4px}
 
-/* ===== LOGIN ===== */
-.login-screen{min-height:100vh;max-width:430px;margin:0 auto;background:linear-gradient(180deg,#453d20 0%,#6b581d 34%,#cf8d08 76%,#ffb51b 100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:18vh 24px 28px;color:#211d17}
-.login-screen .logo{width:min(82vw,310px);height:84px;margin-bottom:18px;filter:drop-shadow(1px 2px 0 #6a4a0666)}
-.login-screen .login-wordmark{display:flex;align-items:center;justify-content:center;gap:0;font-family:Arial,Helvetica,sans-serif;font-size:78px;line-height:.82;font-weight:900;letter-spacing:-7px;white-space:nowrap;overflow:visible}
-.login-screen .login-wordmark span{display:inline-block!important;color:#f2b72d!important;text-shadow:1px 2px 0 #6a4a06!important}.login-screen .login-wordmark .wordmark-pro{color:#fff4c2!important}
-.login-screen .logo img{display:block;width:100%;height:auto}
-.login-screen h2{font-size:22px;line-height:1.1;font-weight:400;color:#fff;margin-bottom:26px;white-space:nowrap}
-.login-screen input{width:100%;max-width:382px;height:56px;padding:0 14px;margin:0 0 14px;border:1px solid #d7d7d7;border-radius:0;background:#fff;color:#222;font-size:18px}
-.login-screen input::placeholder{color:#a9a9a9;opacity:1}
-.login-screen button{width:100%;max-width:382px;height:56px;padding:0;margin-top:0;background:#211f1d;color:#fff;border:0;border-radius:4px;font-weight:400;font-size:18px;cursor:pointer}
-.login-screen .footer-links{max-width:382px;margin-top:24px;font-size:17px;line-height:1.65;text-align:center;color:#201b16;opacity:1}
-.role-login-badge{background:#5c3d1e;color:#ffe566;border:1px solid #ffe566;border-radius:3px;padding:5px 12px;margin:-4px 0 12px;font-weight:700;font-size:10px;letter-spacing:.8px}
-.login-role-links{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px;font-size:10px}
-.login-role-links a{color:#3d2a0a;text-decoration:underline;font-weight:700}
+/* ===== LOGIN (matched to antpro999.net) ===== */
+.login-screen{
+  min-height:100vh;
+  max-width:430px;
+  margin:0 auto;
+  background:linear-gradient(#1f1f22 0%, #fbb81e 100%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:40px 24px 28px;
+  color:#211d17;
+  font-family:Roboto,sans-serif!important;
+}
+.login-screen .logo{
+  width:min(70vw,260px);
+  height:auto;
+  margin-bottom:28px;
+}
+.login-screen .login-wordmark{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+  font-family:Roboto,sans-serif;
+  font-size:64px;
+  line-height:.85;
+  font-weight:900;
+  letter-spacing:-4px;
+  white-space:nowrap;
+}
+.login-screen .login-wordmark span{
+  display:inline-block!important;
+  color:#fbb81e!important;
+}
+.login-screen .login-wordmark .wordmark-pro{
+  color:#2A2827!important;
+}
+.login-screen .logo img{
+  display:block;
+  width:100%;
+  height:auto;
+}
+.login-screen h2,
+.login-screen h5{
+  font-size:18px;
+  line-height:1.2;
+  font-weight:700;
+  color:#fff!important;
+  margin-bottom:22px;
+  text-align:center;
+  font-family:Roboto,sans-serif!important;
+}
+.login-screen input{
+  width:100%;
+  max-width:390px;
+  height:45px;
+  padding:0 12px;
+  margin:0 0 12px;
+  border:1px solid grey;
+  border-radius:2px;
+  background:#fff;
+  color:#495057;
+  font-size:14px;
+  font-family:Roboto,sans-serif!important;
+  transition:all .4s;
+}
+.login-screen input::placeholder{
+  color:#a9a9a9;
+  opacity:1;
+}
+.login-screen input:focus{
+  outline:none;
+  border-color:#fbb81e;
+}
+.login-screen button{
+  width:100%;
+  max-width:390px;
+  height:45px;
+  padding:0;
+  margin-top:4px;
+  background:#2A2827;
+  color:#fff;
+  border:0;
+  border-radius:4px;
+  font-weight:700;
+  font-size:14px;
+  font-family:Roboto,sans-serif!important;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  transition:.3s all;
+}
+.login-screen button:hover{
+  background:#1a1817;
+}
+.login-screen .footer-links{
+  max-width:390px;
+  margin-top:18px;
+  font-size:15px;
+  line-height:1.7;
+  text-align:center;
+  color:#000;
+  font-weight:600;
+  font-family:Roboto,sans-serif!important;
+}
+.login-screen .footer-links a{
+  color:#000;
+  text-decoration:underline;
+  font-family:Roboto,sans-serif!important;
+}
+.role-login-badge{
+  background:#2A2827;
+  color:#fbb81e;
+  border:1px solid #fbb81e;
+  border-radius:3px;
+  padding:5px 12px;
+  margin:-4px 0 12px;
+  font-weight:700;
+  font-size:10px;
+  letter-spacing:.8px;
+}
+.login-role-links{
+  display:flex;
+  gap:8px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-top:14px;
+  font-size:12px;
+}
+.login-role-links a{
+  color:#000;
+  text-decoration:underline;
+  font-weight:600;
+}
 .tms-score{font-size:22px;font-weight:900;color:#ffe566;white-space:nowrap}
 .tms-score:has(+ *){min-height:25px}
 .tms-score:where(:empty){display:none}
@@ -229,5 +352,3 @@ body{background:#111;min-height:100vh}
 .create-client-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
 .create-client-grid label{font-size:10px;font-weight:700;color:#555}
 .create-client-grid input{display:block;width:100%;padding:8px 6px;margin-top:3px;border:1px solid #ccc;border-radius:3px;font-size:12px}
-.create-client-actions{display:flex;gap:8px;justify-content:flex-end;padding:0 10px 10px}
-.create-client-actions .blue-btn{cursor:pointer}
