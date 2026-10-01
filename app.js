@@ -779,11 +779,11 @@ function doLogin(){
   state.loggedIn=true;
   sessionStorage.setItem('antpro_user',JSON.stringify(acc));
   if(acc.role==='supermaster'){
-    go('super');
+    go('home');
   } else if(acc.role==='master'){
     go('home');
   } else if(acc.role==='agent'){
-    go('agent');
+    go('home');
   } else {
     if(typeof acc.chips==='number') setCoins(acc.chips);
     state.welcome=true;
@@ -1422,6 +1422,7 @@ function hierarchy(){
   const data=loadUsers();
   const agents=Object.values(data.agents||{});
   return `${topBtn()}
+  <div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENT DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENT DETAILS</button></div>
   <div class="view-title">MASTER & AGENT HIERARCHY</div>
   <div class="master-card">
     <div class="role-chip">MASTER</div>
@@ -1828,6 +1829,13 @@ function toggleGame(key){
 }
 function changeMasterPass(){const v=((document.getElementById('newMasterPass')||{}).value||'').trim();if(v.length<6){toast('Min 6 chars');return}localStorage.setItem(PASS_KEY,v);toast('Password changed')}
 
+function hierarchyDetails(){
+  const layer=state.hierarchyLayer||'super';const data=loadUsers();
+  const rows=layer==='super'?Object.values(data.masters||{}).map(m=>[m.id,m.name||'—','MASTER',m.share||95,m.commission||5,m.chips||0,m.status||'active']):layer==='agent'?Object.values(data.agents||{}).map(a=>[a.id,a.name||'—',a.masterId||'MASTER',a.share||20,a.commission||10,a.chips||0,a.status||'active']):Object.values(data.players||{}).map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
+  const title=layer==='super'?'SUPER DETAILS':layer==='agent'?'AGENT DETAILS':'CLIENT DETAILS';
+  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="blue-btn" onclick="toast('Details opened for ${r[0]}')">＋</button></td></tr>`).join('')||'<tr><td colspan="8">No records</td></tr>'}</tbody></table></div>${back()}`;
+}
+
 /* ===== ROUTER ===== */
 function view(){
   if(state.view==='admin')return admin();
@@ -1855,6 +1863,10 @@ function view(){
   if(state.view==='hierarchy'){
     if(!state.user||(state.user.role!=='master'&&state.user.role!=='supermaster')) return shell(home());
     return shell(hierarchy());
+  }
+  if(state.view==='hierarchy-details'){
+    if(!state.user||(state.user.role!=='master'&&state.user.role!=='supermaster')) return shell(home());
+    return shell(hierarchyDetails());
   }
   if(state.view==='home')return shell(state.user&&state.user.role!=='player'?staffHome():home());
   if(state.view==='rules')return shell(rules());
