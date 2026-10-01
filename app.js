@@ -20,6 +20,14 @@ function readSessionUser(){
   }
 }
 const restoredUser=readSessionUser();
+function roleFromPath(){
+  const p=location.pathname.toLowerCase();
+  if(p.includes('supermaster'))return 'supermaster';
+  if(p.includes('master'))return 'master';
+  if(p.includes('agent'))return 'agent';
+  return 'player';
+}
+function loginPath(role){return role==='supermaster'?'/supermaster-login':role==='master'?'/master-login':role==='agent'?'/agent-login':'/login'}
 
 /* Hierarchy demo data — Master creates Agents; Agents manage Players */
 function defaultUsers(){
@@ -276,10 +284,12 @@ setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].in
 
 
 const state={
-  view:'home',menu:false,loggedIn:location.pathname!=='/login' && !!restoredUser,
+  view:'home',menu:false,loggedIn:!location.pathname.toLowerCase().includes('login') && !!restoredUser,
+  loginRole:roleFromPath(),
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
+  welcome:false,
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
   agentTab: 'players',
@@ -311,7 +321,7 @@ setInterval(syncSharedRounds,1000);
 (function initRoute(){
   const p=location.pathname.replace(/\/$/,'')||'/';
   if(p==='/x9k2-ns-ctrl'){state.view='admin';state.loggedIn=true}
-  else if(p==='/login'){state.view='login';state.loggedIn=false}
+  else if(p==='/login'||p==='/client-login'||p==='/agent-login'||p==='/master-login'||p==='/supermaster-login'){state.view='login';state.loginRole=roleFromPath();state.loggedIn=false}
   else if(p==='/inplay')state.view='inplay';
   else if(p==='/casino')state.view='casino';
   else if(p==='/andar-bahar')state.view='andar';
@@ -726,6 +736,7 @@ function shell(body){
         })()}
       </aside>
     </div>
+    ${state.welcome&&state.user&&state.user.role==='player'?welcomeModal():''}
     <div class="toast ${state.toast?'show':''}">${state.toast}</div>
   </div>`;
 }
@@ -737,12 +748,19 @@ function alwaysGameSpinner(){return `<div class="always-spinner" aria-label="Liv
 
 /* ===== LOGIN ===== */
 function login(){
+  const staff=state.loginRole!=='player';
+  const roleName=state.loginRole==='supermaster'?'SUPER MASTER':state.loginRole==='master'?'MASTER':state.loginRole==='agent'?'AGENT':'CLIENT';
+  const title=staff?`${roleName} LOGIN`:'Please Login to Continue';
+  const userLabel=staff?'User ID':'Username';
   return `<div class="login-screen">
-    <div class="logo"><img src="/assets/antpro-logo.svg" alt="antpro"></div>
-    <h2>Please Login to Continue</h2>
-    <input id="loginUser" autocomplete="username" placeholder="Username" value="" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="logo"><img src="/logo-login.png" alt="antpro"></div>
+    ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
+    <h2>${title}</h2>
+    <input id="loginUser" autocomplete="username" placeholder="${userLabel}" value="" onkeydown="if(event.key==='Enter')doLogin()">
     <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
-    <button type="button" onclick="doLogin()">Login ⇥</button>
+    ${staff?`<input id="loginOtp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" onkeydown="if(event.key==='Enter')doLogin()">`:''}
+    <button type="button" onclick="doLogin()">${staff?'Verify OTP':'Login'} ⇥</button>
+    <div class="login-role-links"><a href="/login">Client</a><a href="/agent-login">Agent</a><a href="/master-login">Master</a><a href="/supermaster-login">Super Master</a></div>
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
   </div>`;
 }
@@ -751,8 +769,11 @@ function doLogin(){
   const passEl=document.getElementById('loginPass');
   const username=(userEl&&userEl.value)||'';
   const password=(passEl&&passEl.value)||'';
+  const expected=state.loginRole||'player';
   const acc=findAccount(username,password);
   if(!acc){toast('Invalid login');return;}
+  if(acc.role!==expected){toast('Use the '+expected.toUpperCase()+' login page');return;}
+  if(expected!=='player' && ((document.getElementById('loginOtp')||{}).value||'').trim()!=='318520'){toast('Invalid demo OTP');return;}
   if(isBlocked(acc.id)){toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
   state.user=acc;
   state.loggedIn=true;
@@ -765,10 +786,12 @@ function doLogin(){
     go('agent');
   } else {
     if(typeof acc.chips==='number') setCoins(acc.chips);
+    state.welcome=true;
     go('home');
   }
   toast(acc.role.toUpperCase()+' login OK');
 }
+function welcomeModal(){return `<div class="modal-overlay" onclick="if(event.target===this){state.welcome=false;render()}"><div class="welcome-modal"><button class="modal-x" onclick="state.welcome=false;render()">×</button><h3>Welcome to antpro999</h3><p><b>Dear Client,</b></p><p>Please verify that you are using the correct official website. Duplicate websites may misuse your login details. Never share your password or OTP with anyone.</p><p>कृपया सही वेबसाइट का ही उपयोग करें और अपना पासवर्ड किसी के साथ साझा न करें।</p><button class="btn-green" onclick="state.welcome=false;render()">Close</button></div></div>`}
 
 /* ===== HOME (exact tile set from video) ===== */
 function home(){
@@ -1472,6 +1495,16 @@ function masterAssignPlayer(){
   render();
 }
 
+function staffLedger(){
+  const u=state.user||{};const data=loadUsers();const role=u.role;
+  const players=Object.values(data.players||{}).filter(p=>role==='agent'?(p.agentId||'').toUpperCase()===(u.id||'').toUpperCase():role==='master'?Object.values(data.agents||{}).some(a=>(a.id||'').toUpperCase()===(p.agentId||'').toUpperCase()&&(a.masterId||'').toUpperCase()===(u.id||'').toUpperCase()):true);
+  const rows=players.length?players.map((p,i)=>`<tr><td>${i+1}</td><td>${p.id}</td><td>${p.name||'—'}</td><td>${(p.chips||0).toFixed(2)}</td><td class="pos">${(p.chips||0).toFixed(2)}</td><td><button class="blue-btn" onclick="boAction('${p.id}','statement')">Settlement</button></td></tr>`).join(''):'<tr><td colspan="6">No ledger entries yet</td></tr>';
+  return `${topBtn()}<div class="view-title">MY LEDGER</div><div class="bo-ledger-summary"><span>Balance: <b>${(u.chips||0).toFixed(2)}</b></span><span>Role: <b>${role.toUpperCase()}</b></span></div><table class="ledger-table"><thead><tr><th>DATE</th><th>EVENT NAME</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th></tr></thead><tbody><tr><td>2026-10-01</td><td>Opening Chips</td><td class="pos">${(u.chips||0).toFixed(2)}</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td></tr><tr><td>2026-10-01</td><td>Cricket / Casino Ledger</td><td>0.00</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td></tr></tbody></table><div class="section-bar">CLIENT LEDGER · LENA / DENA</div><div class="table-scroll"><table class="ledger-table"><thead><tr><th>#</th><th>USER</th><th>NAME</th><th>LENA</th><th>DENA</th><th>ACTION</th></tr></thead><tbody>${rows}</tbody></table></div>${back()}`;
+}
+function staffTransactions(){
+  const u=state.user||{};const data=loadUsers();const list=Object.values(data.players||{});
+  return `${topBtn()}<div class="view-title">LIST OF ALL TRANSACTIONS (0)</div><div class="table-toolbar"><button class="blue-btn">All</button><button class="blue-btn">P&amp;L</button><button class="blue-btn">Account</button></div><table class="ledger-table"><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th></tr></thead><tbody>${list.map(p=>`<tr><td>2026-10-01</td><td>${p.id} · Opening Chips</td><td class="pos">${(p.chips||0).toFixed(2)}</td><td>0.00</td><td>${(p.chips||0).toFixed(2)}</td></tr>`).join('')||'<tr><td colspan="5">No transaction entries yet</td></tr>'}</tbody></table><div class="bo-footnote">Account: ${u.id||'—'} · transaction history is scoped to your hierarchy.</div>${back()}`;
+}
 
 function ledger(){
   const bets=state.activeBets;
@@ -1536,6 +1569,41 @@ function password(){
 }
 
 /* ===== ADMIN (games only + live bets + password change) ===== */
+
+function logoutToRole(){location.href=loginPath(state.user&&state.user.role||'player')}
+function staffHome(){
+  const u=state.user||{};const role=u.role;const data=loadUsers();
+  const masters=Object.values(data.masters||{});const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
+  const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='master'?agents.filter(a=>(a.masterId||'').toUpperCase()===u.id.toUpperCase()).length+players.filter(p=>agents.some(a=>(a.id||'').toUpperCase()===(p.agentId||'').toUpperCase()&&(a.masterId||'').toUpperCase()===u.id.toUpperCase())).length:masters.length+agents.length+players.length;
+  const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||92)+''],['COMPANY SHARE',(100-(u.share||92))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:[['MASTERS',masters.length],['AGENTS',agents.length],['CLIENTS',players.length],['TOTAL CHIPS',players.reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
+  const actions=role==='agent'?[['AGENT','clientdetails','♙'],['SPORTS DETAILS','inplay','▣'],['LEDGER','ledger','◈'],['CASH TRANSACTION','statement','₹'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER','hierarchy','♙'],['SPORTS DETAILS','inplay','▣'],['LEDGER','ledger','◈'],['CASH TRANSACTION','statement','₹'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTERS','hierarchy','▣'],['LEDGER','ledger','◈'],['REPORTS','livebets','▤'],['SETTING','password','⚙'],['LOGOUT','logout','↪']];
+  return `${topBtn()}<div class="bo-dashboard">
+    <div class="bo-identity"><strong>${u.id||'USER'}</strong><span>You are ${role==='agent'?'Agent':role==='master'?'Master':'Super Master'}</span></div>
+    <div class="bo-actions">${actions.map(([label,view,icon])=>`<button class="bo-action-card" onclick="${view==='logout'?'logoutToRole()':`go('${view}')`}"><span class="bo-icon">${icon}</span><b>${label}</b></button>`).join('')}</div>
+    <div class="bo-stats">${stats.map(([label,value])=>`<div class="bo-stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+    <div class="bo-section-note">${role==='agent'?'Manage assigned clients, sports betting and settlement':role==='master'?'Manage agents, clients, exposure and hierarchy':'Manage masters, agents, clients and platform reports'}</div>
+  </div>`;
+}
+function boAction(id,action){
+  const u=findUserById(id);if(!u){toast('User not found');return}
+  if(action==='deposit'||action==='withdraw'){
+    const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
+    const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});toast(action+' '+n+' chips · '+id);
+  }else if(action==='block'){setUserStatus(id,'blocked');toast('Betting blocked · '+id)}
+  else if(action==='casino'){updateUserFields(id,{casinoBlocked:true});toast('Casino blocked · '+id)}
+  else if(action==='reset'){updateUserFields(id,{pass:u.role==='player'?'play123':u.role==='agent'?'agent123':'master123'});toast('Password reset · '+id)}
+  else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
+  render();
+}
+function clientDetails(){
+  const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
+  const data=loadUsers();let list=Object.values(data.players||{});
+  if(role==='agent')list=list.filter(p=>(p.agentId||'').toUpperCase()===(state.user.id||'').toUpperCase());
+  if(role==='master'){
+    const aids=new Set(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===(state.user.id||'').toUpperCase()).map(a=>a.id));list=list.filter(p=>aids.has(p.agentId));
+  }
+  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="toast('Create client form ready')">＋ Create</button><button class="blue-btn" onclick="render()">Update List</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>AGENT</th><th>CONTACT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map(p=>`<tr><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>—</td><td>09-09-2026</td><td>${p.share||20}%</td><td>••••</td><td>0.00</td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><div class="row-actions"><button onclick="boAction('${p.id}','deposit')">＋</button><button onclick="boAction('${p.id}','withdraw')">−</button><button onclick="boAction('${p.id}','block')">BLK</button><button onclick="boAction('${p.id}','casino')">CAS</button><button onclick="boAction('${p.id}','statement')">STMT</button><button onclick="boAction('${p.id}','reset')">PWD</button></div></td></tr>`).join('')||'<tr><td colspan="12">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Actions: Deposit · Withdraw · InActive · Block Betting · Block Casino · Statement · Reset Password</div>${back()}`;
+}
 
 /* ===== AGENT PANEL ===== */
 function agentHome(){
@@ -1772,6 +1840,10 @@ function view(){
     if(!state.user||(state.user.role!=='agent'&&state.user.role!=='master')) return shell(home());
     return shell(agentPlayerView());
   }
+  if(state.view==='clientdetails'){
+    if(!state.user||!['agent','master','supermaster'].includes(state.user.role)) return shell(home());
+    return clientDetails();
+  }
   if(state.view==='super'){
     if(!state.user||state.user.role!=='supermaster') return shell(home());
     return shell(superPanel());
@@ -1784,7 +1856,7 @@ function view(){
     if(!state.user||(state.user.role!=='master'&&state.user.role!=='supermaster')) return shell(home());
     return shell(hierarchy());
   }
-  if(state.view==='home')return shell(home());
+  if(state.view==='home')return shell(state.user&&state.user.role!=='player'?staffHome():home());
   if(state.view==='rules')return shell(rules());
   if(state.view==='inplay')return shell(inplay());
   if(state.view==='match')return shell(match());
@@ -1794,20 +1866,20 @@ function view(){
   if(state.view==='teenpatti')return shell(teenpatti());
   if(state.view==='dragontiger')return shell(dragontiger());
   if(state.view==='hierarchy')return shell(hierarchy());
-  if(state.view==='ledger')return shell(ledger());
+  if(state.view==='ledger')return shell(state.user&&state.user.role!=='player'?staffLedger():ledger());
   if(state.view==='password')return shell(password());
   if(state.view==='matka')return shell(matka());
   if(state.view==='aviator')return shell(aviator());
   if(state.view==='pnl')return shell(pagePnL());
   if(state.view==='bethistory')return shell(pageBetHistory());
-  if(state.view==='statement')return shell(pageStatement());
+  if(state.view==='statement')return shell(state.user&&state.user.role!=='player'?staffTransactions():pageStatement());
   if(state.view==='commission')return shell(pageCommission());
   if(state.view==='usermgmt')return shell(pageUserManage());
   return shell(home());
 }
 function render(){try{app.innerHTML=view()}catch(err){console.error('AntPro render recovery',err);app.innerHTML='<div style="min-height:100vh;background:#111;color:#ffe566;display:grid;place-items:center;padding:24px;text-align:center;font:700 14px Arial"><div>Live service reconnecting…<br><small style="display:block;margin-top:8px;color:#aaa;font-weight:400">Your demo round is safe. Please wait a moment.</small></div></div>'}}
 function go(v){
-  if(v==='login'){state.loggedIn=false;state.menu=false;state.view='login';state.user=null;sessionStorage.removeItem('antpro_user');render();return}
+  if(v==='login'){const role=state.user&&state.user.role||'player';state.loggedIn=false;state.menu=false;state.user=null;sessionStorage.removeItem('antpro_user');location.href=loginPath(role);return}
   const role=(state.user&&state.user.role)||'player';
   // Guards: player cannot open agent/hierarchy/admin
   if(v==='super' && role!=='supermaster'){toast('Only Super Master');return}
