@@ -1650,39 +1650,23 @@ function agentHome(){
   const agent=data.agents[u.id]||u;
   const playerIds=agent.players||[];
   const players=playerIds.map(id=>data.players[id]).filter(Boolean);
-  const totalPlayerChips=players.reduce((s,p)=>s+(p.chips||0),0);
   return `${topBtn()}
-  <div class="view-title">AGENT PANEL — ${agent.id}</div>
-  <div class="agent-stats">
-    <div class="stat-box"><div class="stat-val">${agent.commission||0}%</div><div class="stat-lbl">Commission</div></div>
-    <div class="stat-box"><div class="stat-val">${agent.share||0}%</div><div class="stat-lbl">Share</div></div>
-    <div class="stat-box"><div class="stat-val">${(agent.chips||0).toLocaleString()}</div><div class="stat-lbl">My Chips</div></div>
-    <div class="stat-box"><div class="stat-val">${players.length}</div><div class="stat-lbl">Players</div></div>
+  <div class="hier-grid">
+    <button class="hier-btn" onclick="go('ledger')"><span class="icon">📒</span><small>P/L</small></button>
+    <button class="hier-btn" onclick="go('ledger')"><span class="icon">📋</span><small>My Ledger</small></button>
+    <button class="hier-btn" onclick="go('clientdetails')"><span class="icon">👤</span><small>Client</small></button>
+    <button class="hier-btn" onclick="go('rules')"><span class="icon">ℹ️</span><small>Rules</small></button>
   </div>
-  <div class="section-bar" style="margin-top:8px">MY PLAYERS (Downline)</div>
-  <div class="agent-player-list">
-    ${players.length?players.map(p=>`
-      <div class="agent-player-card">
-        <div class="ap-left">
-          <strong>${p.id}</strong>
-          <small>${p.name||''}</small>
-        </div>
-        <div class="ap-chips">${(p.chips||0).toLocaleString()} chips</div>
-        <div class="ap-actions">
-          <button onclick="agentViewPlayer('${p.id}')">Ledger</button>
-          <button onclick="agentCutChips('${p.id}')">Cut</button>
-          <button onclick="agentAddChips('${p.id}')">Add</button>
-        </div>
-      </div>`).join('')+'<div style="padding:8px;font-size:11px;color:#666">Total players chips: <b>'+totalPlayerChips.toLocaleString()+'</b></div>'
-      :'<div style="padding:16px;text-align:center;color:#888">No players under you yet. Master assigns players.</div>'}
+  <div class="hier-stats">
+    <div class="hier-stat"><span class="val">${players.length}</span><span class="lbl">Members</span></div>
+    <div class="hier-stat"><span class="val">${agent.share||0}</span><span class="lbl">My Share</span></div>
+    <div class="hier-stat"><span class="val">${agent.commission||0}%</span><span class="lbl">Company Share</span></div>
+    <div class="hier-stat"><span class="val">2%</span><span class="lbl">Match Commission</span></div>
+    <div class="hier-stat"><span class="val">3%</span><span class="lbl">Session Commission</span></div>
+    <div class="hier-stat"><span class="val">${(agent.chips||0).toLocaleString()}</span><span class="lbl">Chips</span></div>
   </div>
-  <div class="section-bar">QUICK</div>
-  <div style="padding:8px;display:flex;flex-wrap:wrap;gap:6px">
-    <button class="menu-btn" style="margin:0" onclick="go('inplay')">IN PLAY</button>
-    <button class="menu-btn" style="margin:0" onclick="go('casino')">CASINO</button>
-    <button class="menu-btn" style="margin:0" onclick="go('ledger')">MY LEDGER</button>
-    <button class="menu-btn" style="margin:0" onclick="go('password')">PASSWORD</button>
-  </div>
+  <div class="section-bar">Active Matches</div>
+  <div style="background:#fff;padding:12px;font-size:12px;color:#666;text-align:center">No active matches right now</div>
   ${back()}`;
 }
 function agentViewPlayer(pid){
