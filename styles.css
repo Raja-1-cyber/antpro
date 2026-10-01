@@ -46,7 +46,7 @@ body{background:#111;min-height:100vh}
 
 /* ===== LOGIN ===== */
 .login-screen{min-height:100vh;max-width:430px;margin:0 auto;background:linear-gradient(180deg,#453d20 0%,#6b581d 34%,#cf8d08 76%,#ffb51b 100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:18vh 24px 28px;color:#211d17}
-.login-screen .logo{width:min(78vw,330px);height:auto;margin-bottom:18px;filter:drop-shadow(1px 2px 0 #6a4a0666)}
+.login-screen .logo{width:min(90vw,390px);height:auto;margin-bottom:18px;filter:drop-shadow(1px 2px 0 #6a4a0666)}
 .login-screen .logo img{display:block;width:100%;height:auto}
 .login-screen h2{font-size:22px;line-height:1.1;font-weight:400;color:#fff;margin-bottom:26px;white-space:nowrap}
 .login-screen input{width:100%;max-width:382px;height:56px;padding:0 14px;margin:0 0 14px;border:1px solid #d7d7d7;border-radius:0;background:#fff;color:#222;font-size:18px}

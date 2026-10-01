@@ -12,6 +12,6 @@
     <ellipse cx="86" cy="27" rx="12" ry="4"/>
     <path d="M58 42c-12 5-19 13-23 24 13-8 24-10 34-7z"/>
   </g>
-  <text x="0" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-14" fill="#24211d">antpro</text>
-  <text x="0" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-14" fill="url(#gold)">ant</text>
+  <text x="0" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-26" fill="#24211d">antpro</text>
+  <text x="0" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-26" fill="url(#gold)">ant</text>
 </svg>
