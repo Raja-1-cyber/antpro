@@ -74,18 +74,23 @@ function findAccount(username, password){
   if(u.master && (u.master.id.toUpperCase()===id || id==='MASTER') && (p===u.master.pass || p==='master123')){
     return {role:'master', id:'MASTER', name:'Master', pass:u.master.pass, chips:u.master.chips||0, share:95, commission:5};
   }
-  if(u.agents[id] && u.agents[id].pass===p) return {role:'agent', ...u.agents[id]};
+  const agents=u.agents||{};
+  if(agents[id] && agents[id].pass===p) return {role:'agent', ...agents[id]};
   // also allow login by name-ish
-  for(const k of Object.keys(u.agents||{})){
-    if(u.agents[k].id.toUpperCase()===id && u.agents[k].pass===p) return {role:'agent', ...u.agents[k]};
+  for(const k of Object.keys(agents)){
+    if((agents[k].id||k).toUpperCase()===id && agents[k].pass===p) return {role:'agent', ...agents[k]};
   }
-  if(u.players[id] && u.players[id].pass===p) return {role:'player', ...u.players[id]};
-  for(const k of Object.keys(u.players||{})){
-    if(u.players[k].id.toUpperCase()===id && u.players[k].pass===p) return {role:'player', ...u.players[k]};
+  const players=u.players||{};
+  if(players[id] && players[id].pass===p) return {role:'player', ...players[id]};
+  for(const k of Object.keys(players)){
+    if((players[k].id||k).toUpperCase()===id && players[k].pass===p) return {role:'player', ...players[k]};
   }
+  // Stable built-in accounts survive stale or incomplete browser/server user data.
+  if(id==='SUPER' && p==='super123') return {id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,status:'active'};
+  if(id==='MASTER' && p==='master123') return {id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,status:'active'};
+  if((id==='A1001'||id==='A1002') && p==='agent123') return {id,name:id==='A1001'?'Agent-01':'Agent-02',role:'agent',pass:'agent123',chips:id==='A1001'?50000:25000,commission:id==='A1001'?10:8,share:id==='A1001'?20:15,masterId:'MASTER',players:[],status:'active'};
   return null;
 }
-
 
 function getCoins(){const v=localStorage.getItem(COINS_KEY);return v===null?200:Math.max(0,parseInt(v,10)||0)}
 function setCoins(n){localStorage.setItem(COINS_KEY,String(Math.max(0,Math.floor(n))))}
@@ -725,8 +730,8 @@ function login(){
   return `<div class="login-screen">
     <div class="logo">ant<span>pro</span></div>
     <h2>Please Login to Continue</h2>
-    <input id="loginUser" autocomplete="username" placeholder="Username" value="">
-    <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password">
+    <input id="loginUser" autocomplete="username" placeholder="Username" value="" onkeydown="if(event.key==='Enter')doLogin()">
+    <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
     <button type="button" onclick="doLogin()">Login ⇥</button>
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
   </div>`;
