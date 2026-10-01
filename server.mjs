@@ -31,7 +31,7 @@ async function fetchCricket(){
     const response=await fetch(SPORT_SCORE_URL,{headers:{'user-agent':'AntPro-Demo/1.0','accept':'application/json'}});
     if(!response.ok)throw new Error('SportScore HTTP '+response.status);
     const data=await response.json();
-    const matches=(data.matches||[]).map((m,i)=>({id:i,name:(m.home||'?')+' v '+(m.away||'?'),home:m.home||'',away:m.away||'',homeScore:m.home_score||'—',awayScore:m.away_score||'—',status:(m.status||'').toLowerCase(),statusText:m.status_text||m.status||'',time:m.time||'',competition:m.competition||'',homeLogo:m.home_logo||'',awayLogo:m.away_logo||'',competitionLogo:m.competition_logo||'',url:m.url||'',live:(m.status||'').toLowerCase()==='live'}));
+    const matches=(data.matches||[]).map((m,i)=>({id:i,name:(m.home||'?')+' v '+(m.away||'?'),home:m.home||'',away:m.away||'',homeScore:m.home_score||'',awayScore:m.away_score||'',status:(m.status||'').toLowerCase(),statusText:m.status_text||m.status||'',time:m.time||'',competition:m.competition||'',homeLogo:m.home_logo||'',awayLogo:m.away_logo||'',competitionLogo:m.competition_logo||'',url:m.url||'',live:(m.status||'').toLowerCase()==='live',overs:m.overs??m.current_overs??'',batsmen:Array.isArray(m.batsmen)?m.batsmen:(Array.isArray(m.players)?m.players:[]),bowler:m.bowler||m.current_bowler||'',lastBalls:Array.isArray(m.last_balls)?m.last_balls:(Array.isArray(m.lastBalls)?m.lastBalls:[]),innings:m.innings||'',providerUpdatedAt:m.updated_at||m.updatedAt||''}));
     matches.sort((a,b)=>{const rank=s=>s==='live'?0:s==='upcoming'?1:2;return rank(a.status)-rank(b.status)});
     cricketCache={matches,updated:Date.now(),error:null};
   }catch(error){cricketCache.error=String(error);if(!cricketCache.matches.length)cricketCache.updated=Date.now()}
@@ -39,15 +39,9 @@ async function fetchCricket(){
 }
 function hashKey(value){let h=2166136261;for(const ch of value){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
 function cricketSessions(matchName){
-  const key=String(matchName||'').trim();const seed=hashKey(key);const n=(min,span,offset=0)=>min+((seed+offset)%span);
+  const key=String(matchName||'').trim();
   const live=cricketCache.matches.find(m=>m.name===key);
-  const open=!!(live&&live.live&&live.status==='live');
-  const status=open?'OPEN':'SUSPENDED';
-  const home=(live?.home||key.split(' v ')[0]||'TEAM').slice(0,8).toUpperCase();
-  const sessions=[
-    ['6 OVER RUN '+home,42,45],['10 OVER RUN '+home,68,72],['15 OVER RUN '+home,95,100],['20 OVER RUN '+home,125,132],['FALL OF 1ST WKT',18,22],['MATCH 1ST INNING TOTAL',140,155]
-  ];
-  return sessions.map((x,i)=>({id:i,name:x[0],not:x[1]+(n(0,8,i*7)%8),yes:x[2]+(n(0,7,i*11)%7),rate:(1.8+((n(0,40,i*13)%40)/100)).toFixed(2),status,source:'sportscore-status',updated:cricketCache.updated}));
+  return [{id:0,name:live?.live?'Provider session lines unavailable':'Sessions open when match goes LIVE',not:'—',yes:'—',rate:'—',status:'SUSPENDED',source:'provider-unavailable',updated:cricketCache.updated}];
 }
 function json(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(payload))}
 function readBody(req){return new Promise(resolve=>{let raw='';req.on('data',c=>{raw+=c.toString();if(raw.length>10000)req.destroy()});req.on('end',()=>{try{resolve(raw?JSON.parse(raw):{})}catch{resolve({})}});req.on('error',()=>resolve({}))})}

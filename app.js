@@ -856,7 +856,13 @@ function normalizeFirebaseMatch(id, m){
     time: m?.updated_at ? new Date(m.updated_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
     competition: m?.competition||'',
     live: status==='live',
-    sessions: m?.sessions||{}
+    sessions: m?.sessions||{},
+    overs: m?.overs ?? m?.current_overs ?? '',
+    batsmen: Array.isArray(m?.batsmen)?m.batsmen:(Array.isArray(m?.players)?m.players:[]),
+    bowler: m?.bowler || m?.current_bowler || '',
+    lastBalls: Array.isArray(m?.last_balls)?m.last_balls:(Array.isArray(m?.lastBalls)?m.lastBalls:[]),
+    innings: m?.innings || '',
+    providerUpdatedAt: m?.updated_at || ''
   };
 }
 
@@ -889,6 +895,12 @@ async function fetchLiveCricket(){
         statusText: m.status_text||m.status||'',
         time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
         competition: m.competition||'',
+        overs: m.overs ?? m.current_overs ?? '',
+        batsmen: Array.isArray(m.batsmen)?m.batsmen:(Array.isArray(m.players)?m.players:[]),
+        bowler: m.bowler || m.current_bowler || '',
+        lastBalls: Array.isArray(m.last_balls)?m.last_balls:(Array.isArray(m.lastBalls)?m.lastBalls:[]),
+        innings: m.innings || '',
+        providerUpdatedAt: m.updated_at || m.updatedAt || '',
         live: (m.status||'').toLowerCase()==='live',
         sessions: {}
       }));
@@ -971,20 +983,12 @@ function match(){
   const m = list[state.matchId] || list[0] || {name:'Match',home:'Team A',away:'Team B',homeScore:'—',awayScore:'—',live:false,status:'upcoming',statusText:'',competition:'',time:''};
   const isLive = m.live || m.status==='live';
   if(state.liveSessionsKey!==m.name&&!state.liveSessionsLoading)fetchCricketSessions(m.name);
-  const base = isLive ? 70 + Math.floor(Math.random()*25) : 0;
-  const lagai1 = isLive ? base : '—';
-  const khai1 = isLive ? base + 2 + Math.floor(Math.random()*3) : '—';
-  const lagai2 = isLive ? 95 - base + Math.floor(Math.random()*10) : '—';
-  const khai2 = isLive ? (typeof lagai2==='number'?lagai2:0) + 2 + Math.floor(Math.random()*3) : '—';
-  const fallbackSessions = isLive ? [
-    {name:'6 OVER RUN '+((m.home||'T1').slice(0,8).toUpperCase()), not:42, yes:45, rate:'1.90', status:'OPEN'},
-    {name:'10 OVER RUN '+((m.home||'T1').slice(0,8).toUpperCase()), not:68, yes:72, rate:'1.90', status:'OPEN'},
-    {name:'15 OVER RUN '+((m.home||'T1').slice(0,8).toUpperCase()), not:95, yes:100, rate:'1.90', status:'OPEN'},
-    {name:'20 OVER RUN '+((m.home||'T1').slice(0,8).toUpperCase()), not:125, yes:132, rate:'1.90', status:'OPEN'},
-    {name:'FALL OF 1ST WKT', not:18, yes:22, rate:'1.90', status:'OPEN'},
-    {name:'MATCH 1ST INNING TOTAL', not:140, yes:155, rate:'1.90', status:'OPEN'}
-  ] : [{name:'Sessions open when match goes LIVE', not:'—', yes:'—', rate:'—', status:'SUSPENDED'}];
+  const fallbackSessions = [{name:isLive?'Provider session lines unavailable':'Sessions open when match goes LIVE', not:'—', yes:'—', rate:'—', status:'SUSPENDED'}];
   const sessions = state.liveSessionsKey===m.name && state.liveSessions.length ? state.liveSessions : fallbackSessions;
+  const scorecardPlayers = Array.isArray(m.batsmen)?m.batsmen:[];
+  const playerLabel = p => typeof p==='string' ? p : (p?.name || p?.player || p?.batter || '—');
+  const playerScore = p => typeof p==='object' ? [p.score ?? p.runs, p.balls ?? p.ball].filter(v=>v!==undefined&&v!==null&&v!=='').join(' / ') : '';
+  const lastBalls = Array.isArray(m.lastBalls)?m.lastBalls:[];
 
   return `${topBtn()}
   <div class="match-head">
@@ -1012,8 +1016,16 @@ function match(){
       ${isLive?'<span class="tms-live">● LIVE</span>':''}
       <span>${m.statusText||m.status||''}</span>
       <span>${m.time||''}</span>
+      <span>${m.overs?`Overs ${escapeHTML(m.overs)}`:'Overs unavailable'}</span>
     </div>
     <div class="tms-note">Sirf is match ka score · doosre match ke liye list se select karo</div>
+  </div>
+
+  <div class="section-bar">PLAYERS / BOWLER / LAST BALLS</div>
+  <div class="scorecard-detail-grid">
+    <div><b>BATTERS</b>${scorecardPlayers.length?scorecardPlayers.map(p=>`<div class="scorecard-line"><span>${escapeHTML(playerLabel(p))}</span><strong>${escapeHTML(playerScore(p))}</strong></div>`).join(''):'<div class="provider-empty">Provider did not supply batter names</div>'}</div>
+    <div><b>BOWLER</b><div class="scorecard-line"><span>${escapeHTML(m.bowler||'Provider did not supply bowler name')}</span><strong>${m.overs?escapeHTML(m.overs):''}</strong></div></div>
+    <div class="last-balls"><b>LAST BALLS</b><div class="ball-strip">${lastBalls.length?lastBalls.map(b=>`<span>${escapeHTML(typeof b==='object'?(b.result||b.value||b.runs||'—'):b)}</span>`).join(''):'<em>Provider did not supply last-ball sequence</em>'}</div></div>
   </div>
 
   <div class="section-bar">BOOKMAKER | Min : 100 &nbsp; Max : —</div>
@@ -1022,14 +1034,14 @@ function match(){
     <tbody>
       <tr>
         <td style="text-align:left;font-weight:600">${m.home||'Team A'}</td>
-        <td class="lagai" style="cursor:pointer" onclick="toast('Lagai ${m.home||''} @ ${lagai1}')">${lagai1}</td>
-        <td class="khai" style="cursor:pointer" onclick="toast('Khai ${m.home||''} @ ${khai1}')">${khai1}</td>
+        <td class="lagai">—</td>
+        <td class="khai">—</td>
         <td>0</td>
       </tr>
       <tr>
         <td style="text-align:left;font-weight:600">${m.away||'Team B'}</td>
-        <td class="lagai" style="cursor:pointer" onclick="toast('Lagai ${m.away||''} @ ${lagai2}')">${lagai2}</td>
-        <td class="khai" style="cursor:pointer" onclick="toast('Khai ${m.away||''} @ ${khai2}')">${khai2}</td>
+        <td class="lagai">—</td>
+        <td class="khai">—</td>
         <td>0</td>
       </tr>
     </tbody>
@@ -1057,7 +1069,7 @@ function match(){
           <td style="text-align:left;font-size:10px">${s.name}</td>
           <td>${s.not}/${s.yes}</td>
           <td>${s.rate||'—'}</td>
-          <td style="color:#0a7a0a">OPEN</td>
+          <td style="color:${s.status==='OPEN'?'#0a7a0a':'#c00'}">${escapeHTML(s.status||'SUSPENDED')}</td>
         </tr>`).join(''):'<tr><td colspan="4" style="color:#999;padding:12px">Sessions auto-open when LIVE</td></tr>'}
     </tbody>
   </table>
