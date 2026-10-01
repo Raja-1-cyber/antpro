@@ -223,3 +223,11 @@ body{background:#111;min-height:100vh}
 .tms-meta{display:flex;justify-content:center;gap:10px;margin-top:10px;font-size:10px;opacity:.8;flex-wrap:wrap}
 .tms-live{color:#4caf50;font-weight:700}
 .tms-note{text-align:center;font-size:9px;color:#888;margin-top:8px}
+
+/* ===== CREATE CLIENT FORM ===== */
+.create-client-card{margin:8px;background:#fff;border:1px solid #ddd;border-radius:4px;overflow:hidden}
+.create-client-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+.create-client-grid label{font-size:10px;font-weight:700;color:#555}
+.create-client-grid input{display:block;width:100%;padding:8px 6px;margin-top:3px;border:1px solid #ccc;border-radius:3px;font-size:12px}
+.create-client-actions{display:flex;gap:8px;justify-content:flex-end;padding:0 10px 10px}
+.create-client-actions .blue-btn{cursor:pointer}

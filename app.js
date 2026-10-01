@@ -289,7 +289,7 @@ const state={
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
-  welcome:false,
+  welcome:false,createClient:false,
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
   agentTab: 'players',
@@ -1596,6 +1596,14 @@ function boAction(id,action){
   else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
   render();
 }
+function createClientForm(){return `<div class="create-client-card"><div class="section-bar">CREATE NEW CLIENT</div><div class="create-client-grid"><label>Client ID<input id="newClientId" placeholder="C3001"></label><label>Client Name<input id="newClientName" placeholder="Client name"></label><label>Password<input id="newClientPass" value="play123"></label><label>Opening Chips<input id="newClientChips" type="number" value="1000"></label><label>Share %<input id="newClientShare" type="number" value="20"></label><label>Commission %<input id="newClientComm" type="number" value="10"></label>${state.user&&state.user.role!=='agent'?'<label>Agent ID<input id="newClientAgent" placeholder="A1001"></label>':''}</div><div class="create-client-actions"><button class="blue-btn" onclick="agentCreateClient()">CREATE CLIENT</button><button class="back-btn" style="margin:0;width:auto" onclick="state.createClient=false;render()">CANCEL</button></div></div>`}
+function agentCreateClient(){
+  const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role)){toast('Not allowed');return}
+  const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=parseInt((document.getElementById('newClientShare')||{}).value,10)||0;const commission=parseInt((document.getElementById('newClientComm')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
+  if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
+  const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
+  data.players[id]={id,name,role:'player',pass,chips,share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};if(!data.agents[aid].players)data.agents[aid].players=[];data.agents[aid].players.push(id);saveUsers(data);state.createClient=false;toast('Client '+id+' created under '+aid);render();
+}
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
   const data=loadUsers();let list=Object.values(data.players||{});
@@ -1603,7 +1611,7 @@ function clientDetails(){
   if(role==='master'){
     const aids=new Set(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===(state.user.id||'').toUpperCase()).map(a=>a.id));list=list.filter(p=>aids.has(p.agentId));
   }
-  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="toast('Create client form ready')">＋ Create</button><button class="blue-btn" onclick="render()">Update List</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>AGENT</th><th>CONTACT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map(p=>`<tr><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>—</td><td>09-09-2026</td><td>${p.share||20}%</td><td>••••</td><td>0.00</td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><div class="row-actions"><button onclick="boAction('${p.id}','deposit')">＋</button><button onclick="boAction('${p.id}','withdraw')">−</button><button onclick="boAction('${p.id}','block')">BLK</button><button onclick="boAction('${p.id}','casino')">CAS</button><button onclick="boAction('${p.id}','statement')">STMT</button><button onclick="boAction('${p.id}','reset')">PWD</button></div></td></tr>`).join('')||'<tr><td colspan="12">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Actions: Deposit · Withdraw · InActive · Block Betting · Block Casino · Statement · Reset Password</div>${back()}`;
+  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="state.createClient=true;render()">＋ Create</button><button class="blue-btn" onclick="render()">Update List</button></div>${state.createClient?createClientForm():''}<div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>AGENT</th><th>CONTACT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map(p=>`<tr><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>—</td><td>09-09-2026</td><td>${p.share||20}%</td><td>••••</td><td>0.00</td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><div class="row-actions"><button onclick="boAction('${p.id}','deposit')">＋</button><button onclick="boAction('${p.id}','withdraw')">−</button><button onclick="boAction('${p.id}','block')">BLK</button><button onclick="boAction('${p.id}','casino')">CAS</button><button onclick="boAction('${p.id}','statement')">STMT</button><button onclick="boAction('${p.id}','reset')">PWD</button></div></td></tr>`).join('')||'<tr><td colspan="12">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Actions: Deposit · Withdraw · InActive · Block Betting · Block Casino · Statement · Reset Password</div>${back()}`;
 }
 
 /* ===== AGENT PANEL ===== */
