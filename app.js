@@ -33,14 +33,17 @@ function loginPath(role){return role==='supermaster'?'/supermaster-login':role==
 /* Hierarchy demo data — Master creates Agents; Agents manage Players */
 function defaultUsers(){
   return {
-    superMaster: {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, status:'active'},
+    superMaster: {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'},
+    superMasters: {
+      'SUPER': {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'}
+    },
     masters: {
       'MASTER': {id:'MASTER', name:'Master One', role:'master', pass:'master123', chips:100000, commission:5, share:95, superId:'SUPER', agents:['A1001','A1002'], status:'active'},
       'MASTER2': {id:'MASTER2', name:'Master Two', role:'master', pass:'master123', chips:80000, commission:5, share:95, superId:'SUPER', agents:[], status:'active'}
     },
     agents: {
-      'A1001': {id:'A1001', name:'Agent-01', role:'agent', pass:'agent123', chips:50000, commission:10, share:20, masterId:'MASTER', players:['P2001','P2002'], status:'active'},
-      'A1002': {id:'A1002', name:'Agent-02', role:'agent', pass:'agent123', chips:25000, commission:8, share:15, masterId:'MASTER', players:['P2003'], status:'active'}
+      'A1001': {id:'A1001', name:'Agent-01', role:'agent', pass:'agent123', chips:50000, commission:10, share:20, masterId:'MASTER', superId:'SUPER', players:['P2001','P2002'], status:'active'},
+      'A1002': {id:'A1002', name:'Agent-02', role:'agent', pass:'agent123', chips:25000, commission:8, share:15, masterId:'MASTER', superId:'SUPER', players:['P2003'], status:'active'}
     },
     players: {
       'P2001': {id:'P2001', name:'Player One', role:'player', pass:'play123', chips:5000, agentId:'A1001', status:'active'},
@@ -62,6 +65,20 @@ function saveUsers(u){
   try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
   // permanent server + Firebase mirror (fire-and-forget)
   fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:u})}).catch(()=>{});
+}
+function hierarchyRoot(data=loadUsers()){return data.rootMaster||data.masters?.MASTER||{id:'MASTER',name:'Master',role:'master',chips:0,share:100,commission:0}}
+function hierarchySuperMasters(data=loadUsers()){
+  const sm=data.superMasters||{};
+  if(Object.keys(sm).length)return Object.values(sm);
+  return data.superMaster?[data.superMaster]:[];
+}
+function hierarchyAgents(data=loadUsers(), superId=''){
+  const list=Object.values(data.agents||{});
+  return list.filter(a=>!superId || (a.superId||'SUPER').toUpperCase()===superId.toUpperCase());
+}
+function hierarchyClientIds(data=loadUsers(), superId=''){
+  const agents=hierarchyAgents(data,superId);const ids=new Set(agents.map(a=>(a.id||'').toUpperCase()));
+  return Object.values(data.players||{}).filter(p=>ids.has((p.agentId||'').toUpperCase())).map(p=>p.id);
 }
 async function syncUsersFromServer(){
   try{
@@ -85,6 +102,12 @@ function findAccount(username, password){
   // Super Master
   if(u.superMaster && (u.superMaster.id.toUpperCase()===id || id==='SUPER' || id==='SUPERMASTER') && (p===u.superMaster.pass || p==='super123')){
     return {...u.superMaster, role:'supermaster'};
+  }
+  if(u.superMasters){
+    for(const k of Object.keys(u.superMasters)){
+      const sm=u.superMasters[k];
+      if((sm.id||k).toUpperCase()===id && sm.pass===p) return {...sm, role:'supermaster'};
+    }
   }
   // Masters (dict)
   if(u.masters){
@@ -354,6 +377,7 @@ function audit(action,target,detail=''){
 function uid(){return 'B'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999)}
 function findUserById(id){
   const data=loadUsers(); const ID=(id||'').toUpperCase();
+  if(data.superMasters){for(const k of Object.keys(data.superMasters)){const sm=data.superMasters[k];if((sm.id||k).toUpperCase()===ID)return {...sm,role:'supermaster',_path:'superMasters',_key:k};}}
   if(data.superMaster&&(data.superMaster.id||'').toUpperCase()===ID) return {...data.superMaster, role:'supermaster', _path:'superMaster'};
   if(data.masters){for(const k of Object.keys(data.masters)){const m=data.masters[k]; if((m.id||k).toUpperCase()===ID) return {...m, role:'master', _path:'masters', _key:k};}}
   if(data.agents){for(const k of Object.keys(data.agents)){const a=data.agents[k]; if((a.id||k).toUpperCase()===ID) return {...a, role:'agent', _path:'agents', _key:k};}}
@@ -363,6 +387,7 @@ function findUserById(id){
 function updateUserFields(id, fields){
   const data=loadUsers(); const ID=(id||'').toUpperCase();
   let hit=false;
+  if(data.superMasters){for(const k of Object.keys(data.superMasters)){if((data.superMasters[k].id||k).toUpperCase()===ID){Object.assign(data.superMasters[k],fields);hit=true;}}}
   if(data.superMaster&&(data.superMaster.id||'').toUpperCase()===ID){Object.assign(data.superMaster, fields); hit=true;}
   if(data.masters){for(const k of Object.keys(data.masters)){if((data.masters[k].id||k).toUpperCase()===ID){Object.assign(data.masters[k], fields); hit=true;}}}
   if(data.agents){for(const k of Object.keys(data.agents)){if((data.agents[k].id||k).toUpperCase()===ID){Object.assign(data.agents[k], fields); hit=true;}}}
@@ -500,11 +525,9 @@ function pnlForUser(userId){
 function allDownlinePlayerIds(){
   const role=(state.user&&state.user.role)||'';
   const data=loadUsers();
-  if(role==='supermaster') return Object.keys(data.players||{});
+  if(role==='supermaster') return hierarchyClientIds(data,state.user.id);
   if(role==='master'){
-    const mid=(state.user.id||'').toUpperCase();
-    const agentIds=Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===mid).map(a=>a.id);
-    return Object.values(data.players||{}).filter(pl=>agentIds.includes(pl.agentId)).map(pl=>pl.id);
+    return Object.keys(data.players||{});
   }
   if(role==='agent'){
     const aid=(state.user.id||'').toUpperCase();
@@ -637,14 +660,14 @@ function pageUserManage(){
   const data=loadUsers();
   let list=[];
   if(role==='supermaster'){
-    list=list.concat(Object.values(data.masters||{}).map(x=>({...x, role:'master'})));
+    list=list.concat(hierarchyAgents(data,state.user.id).map(x=>({...x, role:'agent'})));
+    const aids=new Set(hierarchyAgents(data,state.user.id).map(a=>a.id));
+    list=list.concat(Object.values(data.players||{}).filter(pl=>aids.has(pl.agentId)).map(x=>({...x, role:'player'})));
+  } else if(role==='master'){
+    const supers=hierarchySuperMasters(data);
+    list=list.concat(supers.map(x=>({...x, role:'supermaster'})));
     list=list.concat(Object.values(data.agents||{}).map(x=>({...x, role:'agent'})));
     list=list.concat(Object.values(data.players||{}).map(x=>({...x, role:'player'})));
-  } else if(role==='master'){
-    const mid=(state.user.id||'').toUpperCase();
-    list=list.concat(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===mid).map(x=>({...x, role:'agent'})));
-    const aids=new Set(list.map(a=>a.id));
-    list=list.concat(Object.values(data.players||{}).filter(pl=>aids.has(pl.agentId)).map(x=>({...x, role:'player'})));
   } else {
     const aid=(state.user.id||'').toUpperCase();
     list=Object.values(data.players||{}).filter(pl=>(pl.agentId||'').toUpperCase()===aid).map(x=>({...x, role:'player'}));
@@ -1357,43 +1380,40 @@ function liveBetsMaster(){
 function superPanel(){
   if(!state.user||state.user.role!=='supermaster') return shell(home());
   const data=loadUsers();
-  const masters=Object.values(data.masters||{});
-  const totalAgents=Object.keys(data.agents||{}).length;
-  const totalPlayers=Object.keys(data.players||{}).length;
+  const root=hierarchyRoot(data);const agents=hierarchyAgents(data,state.user.id);const playerIds=hierarchyClientIds(data,state.user.id);
   return `${topBtn()}
   <div class="view-title">SUPER MASTER PANEL</div>
   <div class="agent-stats">
-    <div class="stat-box"><div class="stat-val">${masters.length}</div><div class="stat-lbl">Masters</div></div>
-    <div class="stat-box"><div class="stat-val">${totalAgents}</div><div class="stat-lbl">Agents</div></div>
-    <div class="stat-box"><div class="stat-val">${totalPlayers}</div><div class="stat-lbl">Players</div></div>
+    <div class="stat-box"><div class="stat-val">${root.id}</div><div class="stat-lbl">Root Master</div></div>
+    <div class="stat-box"><div class="stat-val">${agents.length}</div><div class="stat-lbl">Agents</div></div>
+    <div class="stat-box"><div class="stat-val">${playerIds.length}</div><div class="stat-lbl">Clients</div></div>
     <div class="stat-box"><div class="stat-val">∞</div><div class="stat-lbl">Limit</div></div>
   </div>
-  <div class="section-bar">MY MASTERS (Downline Books)</div>
+  <div class="section-bar">MY AGENTS (Under ${state.user.id})</div>
   <div class="agent-player-list">
-    ${masters.length?masters.map(m=>{
-      const agCount=(m.agents||[]).length;
+    ${agents.length?agents.map(a=>{
+      const clientCount=(a.players||[]).length;
       return `<div class="agent-player-card">
         <div class="ap-left">
-          <strong>${m.id}</strong>
-          <small>${m.name||''} · ${agCount} agents</small>
-          <small style="display:block;color:#5c3d1e">Share ${m.share||0}% · Comm ${m.commission||0}%</small>
+          <strong>${a.id}</strong>
+          <small>${a.name||''} · ${clientCount} clients</small>
+          <small style="display:block;color:#5c3d1e">Share ${a.share||0}% · Comm ${a.commission||0}%</small>
         </div>
-          <div class="ap-chips">${(m.chips||0).toLocaleString()} <button class="action-trigger" onclick="state.staffModal='${m.id}';render()">＋</button></div>
+          <div class="ap-chips">${(a.chips||0).toLocaleString()} <button class="action-trigger" onclick="state.staffModal='${a.id}';render()">＋</button></div>
       </div>`;
-    }).join(''):'<div style="padding:16px;text-align:center;color:#888">No masters yet</div>'}
+    }).join(''):'<div style="padding:16px;text-align:center;color:#888">No agents yet</div>'}
   </div>
   <div class="section-bar">AUDIT HISTORY</div>
   <div class="table-scroll"><table class="bo-table"><thead><tr><th>TIME</th><th>ACTOR</th><th>ACTION</th><th>TARGET</th><th>DETAIL</th></tr></thead><tbody>${loadAudit().slice(0,12).map(a=>`<tr><td>${new Date(a.ts).toLocaleTimeString('en-IN')}</td><td>${a.actor}</td><td>${a.action}</td><td>${a.target}</td><td>${a.detail||'—'}</td></tr>`).join('')||'<tr><td colspan="5" class="empty-cell">No audited actions yet</td></tr>'}</tbody></table></div>
-  <div class="view-title">CREATE MASTER (New Book / Game)</div>
+  <div class="view-title">CREATE AGENT UNDER SUPER MASTER</div>
   <div class="form-box">
-    <p style="font-size:10px;color:#666;margin-bottom:8px">Har master alag book · Share 95%+ dono ko de sakte ho (apna-apna book)</p>
-    <label>Master ID</label><input id="newMasterId" placeholder="e.g. MASTER3">
-    <label>Name</label><input id="newMasterName" placeholder="Master name">
-    <label>Password</label><input id="newMasterPass" placeholder="Password" value="master123">
-    <label>Share % (e.g. 95)</label><input id="newMasterShare" type="number" value="95" min="0" max="99">
-    <label>Commission %</label><input id="newMasterComm" type="number" value="5" min="0" max="50">
-    <label>Opening Chips</label><input id="newMasterChips" type="number" value="100000">
-    <button class="btn-green" onclick="superCreateMaster()">CREATE MASTER BOOK</button>
+    <label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003">
+    <label>Name</label><input id="newAgentName" placeholder="Agent name">
+    <label>Password</label><input id="newAgentPass" placeholder="Password" value="agent123">
+    <label>Commission %</label><input id="newAgentComm" type="number" value="10">
+    <label>Share %</label><input id="newAgentShare" type="number" value="20">
+    <label>Opening Chips</label><input id="newAgentChips" type="number" value="10000">
+    <button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button>
   </div>
   <div style="padding:8px;display:flex;flex-wrap:wrap;gap:6px">
     <button class="menu-btn" style="margin:0" onclick="go('livebets')">📡 LIVE BETS</button>
@@ -1423,50 +1443,23 @@ function superCreateMaster(){
 
 
 function hierarchy(){
-  const data=loadUsers();
-  const role=state.user&&state.user.role;
-  const masterId=(state.user&&state.user.id||'').toUpperCase();
-  const agents=Object.values(data.agents||{}).filter(a=>role==='supermaster'||(a.masterId||'').toUpperCase()===masterId);
-  return `${topBtn()}
-  <div class="table-toolbar"><button class="blue-btn" onclick="state.staffModal='hierarchy-picker';render()">SELECT MASTER VIEW</button><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENT DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENT DETAILS</button></div>
-  <div class="view-title">MASTER & AGENT HIERARCHY</div>
-  <div class="master-card">
-    <div class="role-chip">${role==='supermaster'?'SUPER MASTER':'MASTER'}</div>
-    <div class="master-row"><strong>${(state.user&&state.user.id)||'MASTER'}</strong><span class="unlimited">Share ${(state.user&&state.user.share)||95}%</span></div>
-    <p style="font-size:10px;color:#666;margin-top:6px">Master creates Agents · sets Commission % & Share %</p>
-  </div>
-  <div class="agent-list">
-    <div class="agent-heading">AGENTS <span>${agents.length}</span></div>
-    ${agents.map(a=>{
-      const pc=(a.players||[]).length;
-      return `<div class="agent-card">
-        <div class="agent-avatar">${(a.name||a.id||'?')[0]}</div>
-        <div><strong>${a.id}</strong><small>${a.name||''} · ${pc} players</small>
-          <small style="display:block;color:#5c3d1e">Comm ${a.commission||0}% · Share ${a.share||0}%</small>
-        </div>
-        <div class="agent-coins">${(a.chips||0).toLocaleString()}</div>
-      </div>`;
-    }).join('') || '<div style="padding:12px;color:#888">No agents yet</div>'}
-  </div>
-  <div class="view-title" style="margin-top:8px">CREATE AGENT</div>
-  <div class="form-box">
-    <label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003">
-    <label>Name</label><input id="newAgentName" placeholder="Agent name">
-    <label>Password</label><input id="newAgentPass" placeholder="Password">
-    <label>Commission %</label><input id="newAgentComm" type="number" value="10">
-    <label>Share %</label><input id="newAgentShare" type="number" value="20">
-    <label>Opening Chips</label><input id="newAgentChips" type="number" value="10000">
-    <button class="btn-green" onclick="masterCreateAgent()">CREATE AGENT</button>
-  </div>
-  <div class="view-title">ASSIGN PLAYER TO AGENT</div>
-  <div class="form-box">
-    <label>Player ID</label><input id="asgPlayerId" placeholder="P2004">
-    <label>Player Name</label><input id="asgPlayerName" placeholder="Name">
-    <label>Agent ID</label><input id="asgAgentId" placeholder="A1001">
-    <label>Opening Chips</label><input id="asgPlayerChips" type="number" value="1000">
-    <button class="btn-green" onclick="masterAssignPlayer()">CREATE & ASSIGN PLAYER</button>
-  </div>
-  ${back()}`;
+  const data=loadUsers();const role=state.user&&state.user.role;const root=hierarchyRoot(data);const supers=hierarchySuperMasters(data);const agents=role==='supermaster'?hierarchyAgents(data,state.user.id):Object.values(data.agents||{});
+  const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><strong>${sm.id}</strong><small>${sm.name||''} · Super Master</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id} · Comm ${sm.commission||0}%</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><strong>${a.id}</strong><small>${a.name||''} · ${(a.players||[]).length} clients</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'} · Comm ${a.commission||0}% · Share ${a.share||0}%</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
+  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" value="super123"><label>Commission %</label><input id="newSuperComm" type="number" value="5"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Commission %</label><input id="newAgentComm" type="number" value="10"><label>Share %</label><input id="newAgentShare" type="number" value="20"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
+}
+function masterCreateSuperMaster(){
+  if(!state.user||state.user.role!=='master'){toast('Only Root Master');return}
+  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newSuperComm')||{}).value,10)||0;const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
+  if(!id||!pass){toast('Super ID + Password required');return}
+  const data=loadUsers();if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,parentMasterId:state.user.id,status:'active'};saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
+}
+function superCreateAgent(){
+  if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
+  const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
+  if(!id||!pass){toast('Agent ID + Password required');return}
+  const data=loadUsers();if(data.agents[id]){toast('Agent ID exists');return}
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user.parentMasterId||'MASTER'),superId:state.user.id,players:[],status:'active'};saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
@@ -1508,8 +1501,8 @@ function scopedClients(){
   const data=loadUsers(), role=state.user&&state.user.role, id=(state.user&&state.user.id||'').toUpperCase();
   let list=Object.values(data.players||{});
   if(role==='agent') list=list.filter(p=>(p.agentId||'').toUpperCase()===id);
-  if(role==='master'){
-    const aids=new Set(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===id).map(a=>a.id));
+  if(role==='supermaster'){
+    const aids=new Set(hierarchyAgents(data,id).map(a=>a.id));
     list=list.filter(p=>aids.has(p.agentId));
   }
   return list;
@@ -1608,15 +1601,15 @@ function password(){
 function logoutToRole(){location.href=loginPath(state.user&&state.user.role||'player')}
 function staffHome(){
   const u=state.user||{};const role=u.role;const data=loadUsers();
-  const masters=Object.values(data.masters||{});const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
-  const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='master'?agents.filter(a=>(a.masterId||'').toUpperCase()===u.id.toUpperCase()).length+players.filter(p=>agents.some(a=>(a.id||'').toUpperCase()===(p.agentId||'').toUpperCase()&&(a.masterId||'').toUpperCase()===u.id.toUpperCase())).length:masters.length+agents.length+players.length;
-  const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||92)+''],['COMPANY SHARE',(100-(u.share||92))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:[['MASTERS',masters.length],['AGENTS',agents.length],['CLIENTS',players.length],['TOTAL CHIPS',players.reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
+  const masters=Object.values(data.masters||{});const supers=hierarchySuperMasters(data);const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
+  const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='supermaster'?hierarchyClientIds(data,u.id).length:role==='master'?supers.length+agents.length+players.length:supers.length+agents.length+players.length;
+  const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['CLIENTS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['SUPER MASTERS',supers.length],['AGENTS',agents.length],['CLIENTS',players.length],['MY SHARE',(u.share||100)+'%'],['REPORTS','READY']]:[['ROOT MASTER',hierarchyRoot(data).id],['AGENTS',hierarchyAgents(data,u.id).length],['CLIENTS',hierarchyClientIds(data,u.id).length],['TOTAL CHIPS',players.filter(p=>hierarchyClientIds(data,u.id).includes(p.id)).reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
   const actions=role==='agent'?[['AGENT DETAIL','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER DETAIL','hierarchy','♙'],['AGENT / CLIENT','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['USER CONTROL','usermgmt','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTER DETAILS','hierarchy-details','▣'],['AGENT DETAILS','hierarchy-details','♙'],['CLIENT DETAILS','clientdetails','♙'],['LEDGER','ledger','₹'],['REPORTS','livebets','▥'],['COMM. REPORT','commission','%'],['USER CONTROL','usermgmt','⚙'],['AUDIT / SETTINGS','super','⚙'],['LOGOUT','logout','↪']];
   return `${topBtn()}<div class="bo-dashboard">
     <div class="bo-identity"><strong>${u.id||'USER'}</strong><span>You are ${role==='agent'?'Agent':role==='master'?'Master':'Super Master'}</span></div>
     <div class="bo-actions">${actions.map(([label,view,icon])=>`<button class="bo-action-card" onclick="${view==='logout'?'logoutToRole()':`go('${view}')`}"><span class="bo-icon">${icon}</span><b>${label}</b></button>`).join('')}</div>
     <div class="bo-stats">${stats.map(([label,value])=>`<div class="bo-stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
-    <div class="bo-section-note">${role==='agent'?'Manage assigned clients, sports betting and settlement':role==='master'?'Manage agents, clients, exposure and hierarchy':'Manage masters, agents, clients and platform reports'}</div>
+    <div class="bo-section-note">${role==='agent'?'Manage assigned clients, sports betting and settlement':role==='master'?'Root Master: manage Super Masters, Agents, Clients and hierarchy':'Super Master: manage assigned Agents, Clients and platform reports'}</div>
   </div>`;
 }
 function boAction(id,action){
@@ -1875,9 +1868,9 @@ function hierarchyDetails(){
   const layer=state.hierarchyLayer||'super';const data=loadUsers();const role=state.user&&state.user.role;const id=(state.user&&state.user.id||'').toUpperCase();
   let rows=[];
   if(layer==='super'){
-    rows=role==='supermaster'?[...(Object.values(data.masters||{}).map(m=>[m.id,m.name||'—',m.superId||'SUPER',m.share||95,m.commission||5,m.chips||0,m.status||'active']))]:[[data.superMaster?.id||'SUPER',data.superMaster?.name||'Super Master','PLATFORM','—','—',data.superMaster?.chips||0,data.superMaster?.status||'active']];
+    rows=role==='master'?hierarchySuperMasters(data).map(sm=>[sm.id,sm.name||'—',sm.parentMasterId||'MASTER',sm.share||0,sm.commission||0,sm.chips||0,sm.status||'active']):role==='supermaster'?hierarchyAgents(data,id).map(a=>[a.id,a.name||'—',a.superId||id,a.share||0,a.commission||0,a.chips||0,a.status||'active']):[[data.superMaster?.id||'SUPER',data.superMaster?.name||'Super Master','PLATFORM','—','—',data.superMaster?.chips||0,data.superMaster?.status||'active']];
   }else if(layer==='agent'){
-    rows=Object.values(data.agents||{}).filter(a=>role==='supermaster'||(a.masterId||'').toUpperCase()===id).map(a=>[a.id,a.name||'—',a.masterId||'MASTER',a.share||20,a.commission||10,a.chips||0,a.status||'active']);
+    rows=hierarchyAgents(data,role==='supermaster'?id:'').map(a=>[a.id,a.name||'—',a.superId||'SUPER',a.share||20,a.commission||10,a.chips||0,a.status||'active']);
   }else{
     rows=scopedClients().map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
   }
