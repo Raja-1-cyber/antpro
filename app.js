@@ -891,6 +891,7 @@ function normalizeFirebaseMatch(id, m){
     overs: m?.overs ?? m?.current_overs ?? '',
     batsmen: Array.isArray(m?.batsmen)?m.batsmen:(Array.isArray(m?.players)?m.players:[]),
     bowler: m?.bowler || m?.current_bowler || '',
+    bowlerStats: m?.bowler_stats || m?.bowlerStats || {overs:m?.bowler_overs,maidens:m?.bowler_maidens,runs:m?.bowler_runs,wickets:m?.bowler_wickets,economy:m?.bowler_economy},
     lastBalls: Array.isArray(m?.last_balls)?m.last_balls:(Array.isArray(m?.lastBalls)?m.lastBalls:[]),
     innings: m?.innings || '',
     providerUpdatedAt: m?.updated_at || ''
@@ -929,6 +930,7 @@ async function fetchLiveCricket(){
         overs: m.overs ?? m.current_overs ?? '',
         batsmen: Array.isArray(m.batsmen)?m.batsmen:(Array.isArray(m.players)?m.players:[]),
         bowler: m.bowler || m.current_bowler || '',
+        bowlerStats: m.bowler_stats || m.bowlerStats || {overs:m.bowler_overs,maidens:m.bowler_maidens,runs:m.bowler_runs,wickets:m.bowler_wickets,economy:m.bowler_economy},
         lastBalls: Array.isArray(m.last_balls)?m.last_balls:(Array.isArray(m.lastBalls)?m.lastBalls:[]),
         innings: m.innings || '',
         providerUpdatedAt: m.updated_at || m.updatedAt || '',
@@ -1018,8 +1020,9 @@ function match(){
   const sessions = state.liveSessionsKey===m.name && state.liveSessions.length ? state.liveSessions : fallbackSessions;
   const scorecardPlayers = Array.isArray(m.batsmen)?m.batsmen:[];
   const playerLabel = p => typeof p==='string' ? p : (p?.name || p?.player || p?.batter || '—');
-  const playerScore = p => typeof p==='object' ? [p.score ?? p.runs, p.balls ?? p.ball].filter(v=>v!==undefined&&v!==null&&v!=='').join(' / ') : '';
+  const stat = (p,...keys) => {if(typeof p!=='object'||!p)return '';for(const k of keys){if(p[k]!==undefined&&p[k]!==null&&p[k]!=='')return p[k]}return ''};
   const lastBalls = Array.isArray(m.lastBalls)?m.lastBalls:[];
+  const bowlerStats=m.bowlerStats||{};
 
   return `${topBtn()}
   <div class="match-head">
@@ -1052,14 +1055,11 @@ function match(){
     <div class="tms-note">Sirf is match ka score · doosre match ke liye list se select karo</div>
   </div>
 
-  <div class="section-bar">PLAYERS / BOWLER / LAST BALLS</div>
-  <div class="scorecard-detail-grid">
-    <div><b>BATTERS</b>${scorecardPlayers.length?scorecardPlayers.map(p=>`<div class="scorecard-line"><span>${escapeHTML(playerLabel(p))}</span><strong>${escapeHTML(playerScore(p))}</strong></div>`).join(''):'<div class="provider-empty">Provider did not supply batter names</div>'}</div>
-    <div><b>BOWLER</b><div class="scorecard-line"><span>${escapeHTML(m.bowler||'Provider did not supply bowler name')}</span><strong>${m.overs?escapeHTML(m.overs):''}</strong></div></div>
-    <div class="last-balls"><b>LAST BALLS</b><div class="ball-strip">${lastBalls.length?lastBalls.map(b=>`<span>${escapeHTML(typeof b==='object'?(b.result||b.value||b.runs||'—'):b)}</span>`).join(''):'<em>Provider did not supply last-ball sequence</em>'}</div></div>
-  </div>
+  <div class="section-bar">SCORECARD</div>
+  <div class="video-scorecard-wrap"><table class="video-scorecard"><thead><tr><th class="name-col">BATSMEN</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${scorecardPlayers.length?scorecardPlayers.map(p=>`<tr><td class="name-col">${escapeHTML(playerLabel(p))}</td><td>${escapeHTML(stat(p,'runs','score'))}</td><td>${escapeHTML(stat(p,'balls','ball'))}</td><td>${escapeHTML(stat(p,'fours','4s','boundaries4'))}</td><td>${escapeHTML(stat(p,'sixes','6s','boundaries6'))}</td><td>${escapeHTML(stat(p,'strikeRate','strike_rate','sr'))}</td></tr>`).join(''):'<tr><td colspan="6" class="provider-empty">Provider did not supply batter names</td></tr>'}</tbody><thead><tr><th class="name-col">BOWLER</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody><tr><td class="name-col">${escapeHTML(m.bowler||'Provider did not supply bowler name')}</td><td>${escapeHTML(bowlerStats.overs??m.overs??'')}</td><td>${escapeHTML(bowlerStats.maidens??'')}</td><td>${escapeHTML(bowlerStats.runs??'')}</td><td>${escapeHTML(bowlerStats.wickets??'')}</td><td>${escapeHTML(bowlerStats.economy??'')}</td></tr></tbody></table></div>
+  <div class="section-bar">LAST BALLS</div><div class="last-balls scorecard-detail-grid"><div class="ball-strip">${lastBalls.length?lastBalls.map(b=>`<span>${escapeHTML(typeof b==='object'?(b.result||b.value||b.runs||'—'):b)}</span>`).join(''):'<em>Provider did not supply last-ball sequence</em>'}</div></div>
 
-  <div class="section-bar">BOOKMAKER | Min : 100 &nbsp; Max : —</div>
+  <div class="section-bar">BOOKMAKER | Min : NaN &nbsp; Max : —</div>
   <table class="bm-table">
     <thead><tr><th style="text-align:left">TEAM</th><th>LAGAI</th><th>KHAI</th><th>POS.</th></tr></thead>
     <tbody>

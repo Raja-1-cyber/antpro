@@ -98,3 +98,13 @@
 /* Video-style hierarchy drill-down links */
 .hierarchy-link{display:block;padding:0;border:0;background:none;color:#0b66c3;text-decoration:underline;font-weight:800;font-size:12px;cursor:pointer;text-align:left}
 .hierarchy-link:active{color:#06457f}
+
+/* Video scorecard parity: compact batting and bowling stat columns. */
+.video-scorecard-wrap{overflow-x:auto;background:#fff}
+.video-scorecard{width:100%;border-collapse:collapse;font-size:10px;color:#222;min-width:330px}
+.video-scorecard th{background:#151d38;color:#fff;font-weight:800;text-align:right;padding:6px 5px;border-bottom:1px solid #59617a}
+.video-scorecard th.name-col,.video-scorecard td.name-col{text-align:left;min-width:145px}
+.video-scorecard td{padding:7px 5px;text-align:right;border-bottom:1px solid #e1e1e1;font-weight:700}
+.video-scorecard td.name-col{font-weight:700;color:#202a52}
+.video-scorecard thead:nth-of-type(2) th{background:#202943;color:#fff}
+.video-scorecard tbody tr:nth-child(even){background:#fafafa}
