@@ -289,7 +289,7 @@ const state={
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
-  welcome:false,createClient:false,
+  welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
   agentTab: 'players',
@@ -509,33 +509,13 @@ function allDownlinePlayerIds(){
 function pagePnL(){
   const role=(state.user&&state.user.role)||'player';
   const ids=allDownlinePlayerIds();
-  const rows=ids.map(id=>{
-    const u=findUserById(id)||{id, name:id};
-    const p=pnlForUser(id);
-    return {id, name:u.name||id, status:u.status||'active', ...p};
-  });
-  const tot=rows.reduce((a,r)=>({stake:a.stake+r.stake, pnl:a.pnl+r.pnl, bets:a.bets+r.bets}), {stake:0,pnl:0,bets:0});
+  const rows=ids.map(id=>{const u=findUserById(id)||{id,name:id};return {id,name:u.name||id,status:u.status||'active',...pnlForUser(id)}});
+  const tot=rows.reduce((a,r)=>({stake:a.stake+r.stake,pnl:a.pnl+r.pnl,bets:a.bets+r.bets}),{stake:0,pnl:0,bets:0});
   return `${topBtn()}
-  <div class="view-title">P &amp; L REPORT</div>
-  <div class="agent-stats">
-    <div class="stat-box"><div class="stat-val">${tot.bets}</div><div class="stat-lbl">Bets</div></div>
-    <div class="stat-box"><div class="stat-val">${tot.stake}</div><div class="stat-lbl">Total Stake</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:${tot.pnl>=0?'#0a7a0a':'#c00'}">${tot.pnl>=0?'+':''}${tot.pnl}</div><div class="stat-lbl">Net P/L</div></div>
-    <div class="stat-box"><div class="stat-val">${rows.length}</div><div class="stat-lbl">Clients</div></div>
-  </div>
-  <div class="section-bar">CLIENT WISE P/L (Coins)</div>
-  <table class="ledger-table">
-    <thead><tr><th>ID</th><th>NAME</th><th>STATUS</th><th>BETS</th><th>STAKE</th><th>W</th><th>L</th><th>P/L</th></tr></thead>
-    <tbody>
-      ${rows.length?rows.map(r=>`<tr>
-        <td style="font-weight:700">${r.id}</td><td>${r.name||''}</td>
-        <td style="color:${r.status==='active'?'#0a7a0a':('#c00')};font-size:10px;text-transform:uppercase">${r.status}</td>
-        <td>${r.bets}</td><td>${r.stake}</td><td class="pos">${r.won}</td><td class="neg">${r.lost}</td>
-        <td class="${r.pnl>=0?'pos':'neg'}">${r.pnl>=0?'+':''}${r.pnl}</td>
-      </tr>`).join(''):'<tr><td colspan="8" style="color:#999">No clients / bets yet</td></tr>'}
-    </tbody>
-  </table>
-  ${back()}`;
+  <div class="view-title">PROFIT LOSS</div>
+  <div class="report-filter-card"><label>FROM<input id="pnlFrom" type="date" value="${state.pnlFrom}" onchange="state.pnlFrom=this.value"></label><label>TO<input id="pnlTo" type="date" value="${state.pnlTo}" onchange="state.pnlTo=this.value"></label><label>GAME TYPE<select id="pnlType" onchange="state.pnlType=this.value"><option>ALL</option><option>CRICKET</option><option>CASINO</option><option>FANCY</option></select></label><button class="blue-btn" onclick="render()">SEARCH</button></div>
+  <div class="agent-stats"><div class="stat-box"><div class="stat-val">${tot.bets}</div><div class="stat-lbl">BETS</div></div><div class="stat-box"><div class="stat-val">${tot.stake.toFixed(2)}</div><div class="stat-lbl">TOTAL STAKE</div></div><div class="stat-box"><div class="stat-val" style="color:${tot.pnl>=0?'#0a7a0a':'#c00'}">${tot.pnl>=0?'+':''}${tot.pnl.toFixed(2)}</div><div class="stat-lbl">TOTAL P/L</div></div><div class="stat-box"><div class="stat-val">${rows.length}</div><div class="stat-lbl">CLIENTS</div></div></div>
+  <div class="section-bar">CLIENT-WISE PROFIT LOSS</div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>STATUS</th><th>BETS</th><th>STAKE</th><th>WON</th><th>LOST</th><th>P/L</th><th>DETAIL</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr><td>${r.id}</td><td>${r.name}</td><td class="${r.status==='active'?'ok':'bad'}">${r.status}</td><td>${r.bets}</td><td>${r.stake.toFixed(2)}</td><td class="ok">${r.won}</td><td class="bad">${r.lost}</td><td class="${r.pnl>=0?'ok':'bad'}">${r.pnl>=0?'+':''}${r.pnl.toFixed(2)}</td><td><button class="blue-btn" onclick="openExposure('${r.id}')">Exposure</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty-cell">No report rows yet</td></tr>`}</tbody></table></div>${state.exposureUser?exposureModal(state.exposureUser):''}${back()}`;
 }
 
 function pageBetHistory(){
@@ -737,6 +717,7 @@ function shell(body){
       </aside>
     </div>
     ${state.welcome&&state.user&&state.user.role==='player'?welcomeModal():''}
+    ${state.staffModal==='hierarchy-picker'?hierarchyPicker():''}
     <div class="toast ${state.toast?'show':''}">${state.toast}</div>
   </div>`;
 }
@@ -1422,7 +1403,7 @@ function hierarchy(){
   const data=loadUsers();
   const agents=Object.values(data.agents||{});
   return `${topBtn()}
-  <div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENT DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENT DETAILS</button></div>
+  <div class="table-toolbar"><button class="blue-btn" onclick="state.staffModal='hierarchy-picker';render()">SELECT MASTER VIEW</button><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENT DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENT DETAILS</button></div>
   <div class="view-title">MASTER & AGENT HIERARCHY</div>
   <div class="master-card">
     <div class="role-chip">MASTER</div>
@@ -1496,11 +1477,37 @@ function masterAssignPlayer(){
   render();
 }
 
+function scopedClients(){
+  const data=loadUsers(), role=state.user&&state.user.role, id=(state.user&&state.user.id||'').toUpperCase();
+  let list=Object.values(data.players||{});
+  if(role==='agent') list=list.filter(p=>(p.agentId||'').toUpperCase()===id);
+  if(role==='master'){
+    const aids=new Set(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===id).map(a=>a.id));
+    list=list.filter(p=>aids.has(p.agentId));
+  }
+  return list;
+}
+function openExposure(id){state.exposureUser=id;render()}
+function closeExposure(){state.exposureUser='';render()}
+function exposureModal(id){
+  const u=findUserById(id)||{id,name:id};
+  const bets=(state.activeBets||[]).filter(b=>(b.player||b.playerId)===id).slice(0,12);
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeExposure()"><div class="staff-modal exposure-modal"><button class="modal-x" onclick="closeExposure()">×</button><h3>USER EXPOSURE</h3><div class="modal-subtitle">${u.id} · ${u.name||''} · Demo coins only</div><div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION NAME</th><th>STAKE</th><th>RATE</th><th>TYPE</th><th>TIME</th><th>LOSS</th><th>PROFIT</th></tr></thead><tbody>${bets.length?bets.map(b=>`<tr><td>${b.match||b.type||'Casino'}</td><td>${b.team||b.side||'—'}</td><td>${b.amt||0}</td><td>${b.rate||'—'}</td><td>${b.type||'KHAI'}</td><td>${new Date(b.ts||Date.now()).toLocaleTimeString('en-IN')}</td><td class="bad">${b.status==='lost'?b.amt||0:0}</td><td class="ok">${b.status==='won'?b.profit||0:0}</td></tr>`).join(''):`<tr><td colspan="8" class="empty-cell">No active exposure for ${u.id}</td></tr>`}</tbody></table></div><button class="back-btn" onclick="closeExposure()">CLOSE</button></div></div>`;
+}
+function staffActionMenu(id){
+  const u=findUserById(id)||{id};
+  const actions=[['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
+  return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal action-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>${u.id} ACTIONS</h3><div class="modal-subtitle">All actions affect demo coins/local state only.</div>${actions.map(([label,key])=>`<button class="modal-action" onclick="boAction('${id}','${key}')">${label}<span>›</span></button>`).join('')}<button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
+}
+function hierarchyPicker(){
+  return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal hierarchy-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>SELECT MASTER VIEW</h3><button class="modal-action" onclick="state.hierarchyLayer='super';state.staffModal='';go('hierarchy-details')">Super Master<span>›</span></button><button class="modal-action" onclick="state.hierarchyLayer='agent';state.staffModal='';go('hierarchy-details')">Agent Master<span>›</span></button><button class="modal-action" onclick="state.hierarchyLayer='client';state.staffModal='';go('hierarchy-details')">Client Master<span>›</span></button><button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
+}
+
 function staffLedger(){
-  const u=state.user||{};const data=loadUsers();const role=u.role;
-  const players=Object.values(data.players||{}).filter(p=>role==='agent'?(p.agentId||'').toUpperCase()===(u.id||'').toUpperCase():role==='master'?Object.values(data.agents||{}).some(a=>(a.id||'').toUpperCase()===(p.agentId||'').toUpperCase()&&(a.masterId||'').toUpperCase()===(u.id||'').toUpperCase()):true);
-  const rows=players.length?players.map((p,i)=>`<tr><td>${i+1}</td><td>${p.id}</td><td>${p.name||'—'}</td><td>${(p.chips||0).toFixed(2)}</td><td class="pos">${(p.chips||0).toFixed(2)}</td><td><button class="blue-btn" onclick="boAction('${p.id}','statement')">Settlement</button></td></tr>`).join(''):'<tr><td colspan="6">No ledger entries yet</td></tr>';
-  return `${topBtn()}<div class="view-title">MY LEDGER</div><div class="bo-ledger-summary"><span>Balance: <b>${(u.chips||0).toFixed(2)}</b></span><span>Role: <b>${role.toUpperCase()}</b></span></div><table class="ledger-table"><thead><tr><th>DATE</th><th>EVENT NAME</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th></tr></thead><tbody><tr><td>2026-10-01</td><td>Opening Chips</td><td class="pos">${(u.chips||0).toFixed(2)}</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td></tr><tr><td>2026-10-01</td><td>Cricket / Casino Ledger</td><td>0.00</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td></tr></tbody></table><div class="section-bar">CLIENT LEDGER · LENA / DENA</div><div class="table-scroll"><table class="ledger-table"><thead><tr><th>#</th><th>USER</th><th>NAME</th><th>LENA</th><th>DENA</th><th>ACTION</th></tr></thead><tbody>${rows}</tbody></table></div>${back()}`;
+  const u=state.user||{};const players=scopedClients();
+  const lena=players.filter(p=>(p.chips||0)>=0), dena=players.filter(p=>(p.chips||0)<0);
+  const block=(title,list,cls)=>`<div class="section-bar ${cls}">${title} <span>${list.reduce((n,p)=>n+Math.abs(p.chips||0),0).toFixed(2)}</span></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>USER</th><th>NAME</th><th>BALANCE</th><th>SETTLEMENT</th></tr></thead><tbody>${list.length?list.map(p=>`<tr><td>${p.id}</td><td>${p.name||'—'}</td><td class="${cls==='lena'?'ok':'bad'}">${Math.abs(p.chips||0).toFixed(2)}</td><td><button class="blue-btn" onclick="boAction('${p.id}','settlement')">SETTLEMENT</button></td></tr>`).join(''):`<tr><td colspan="4" class="empty-cell">No ${title.toLowerCase()} entries</td></tr>`}</tbody></table></div>`;
+  return `${topBtn()}<div class="view-title">MY LEDGER</div><div class="bo-ledger-summary"><span>Balance: <b>${(u.chips||0).toFixed(2)}</b></span><span>Role: <b>${(u.role||'').toUpperCase()}</b></span></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>DATE</th><th>EVENT NAME</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th><th>TYPE</th></tr></thead><tbody><tr><td>2026-10-01</td><td>Opening Chips</td><td class="ok">${(u.chips||0).toFixed(2)}</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td><td>Account</td></tr><tr><td>2026-10-01</td><td>Cricket / Casino Ledger</td><td>0.00</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td><td>Ledger</td></tr></tbody></table></div>${block('LENA · RECEIVABLE',lena,'lena')}${block('DENA · PAYABLE',dena,'dena')}${back()}`;
 }
 function staffTransactions(){
   const u=state.user||{};const data=loadUsers();const list=Object.values(data.players||{});
@@ -1590,7 +1597,11 @@ function boAction(id,action){
   if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
     const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});toast(action+' '+n+' chips · '+id);
-  }else if(action==='block'){setUserStatus(id,'blocked');toast('Betting blocked · '+id)}
+  }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
+  else if(action==='inactive'){setUserStatus(id,'suspended');toast('Demo user inactive · '+id)}
+  else if(action==='exposure'){openExposure(id);return}
+  else if(action==='settlement'){toast('Demo settlement recorded · '+id)}
+  else if(action==='edit'||action==='account'||action==='loginreport'){toast(action.toUpperCase()+' demo view · '+id)}
   else if(action==='casino'){updateUserFields(id,{casinoBlocked:true});toast('Casino blocked · '+id)}
   else if(action==='reset'){updateUserFields(id,{pass:u.role==='player'?'play123':u.role==='agent'?'agent123':'master123'});toast('Password reset · '+id)}
   else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
@@ -1606,12 +1617,8 @@ function agentCreateClient(){
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
-  const data=loadUsers();let list=Object.values(data.players||{});
-  if(role==='agent')list=list.filter(p=>(p.agentId||'').toUpperCase()===(state.user.id||'').toUpperCase());
-  if(role==='master'){
-    const aids=new Set(Object.values(data.agents||{}).filter(a=>(a.masterId||'').toUpperCase()===(state.user.id||'').toUpperCase()).map(a=>a.id));list=list.filter(p=>aids.has(p.agentId));
-  }
-  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="state.createClient=true;render()">＋ Create</button><button class="blue-btn" onclick="render()">Update List</button></div>${state.createClient?createClientForm():''}<div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>AGENT</th><th>CONTACT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map(p=>`<tr><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>—</td><td>09-09-2026</td><td>${p.share||20}%</td><td>••••</td><td>0.00</td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><div class="row-actions"><button onclick="boAction('${p.id}','deposit')">＋</button><button onclick="boAction('${p.id}','withdraw')">−</button><button onclick="boAction('${p.id}','block')">BLK</button><button onclick="boAction('${p.id}','casino')">CAS</button><button onclick="boAction('${p.id}','statement')">STMT</button><button onclick="boAction('${p.id}','reset')">PWD</button></div></td></tr>`).join('')||'<tr><td colspan="12">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Actions: Deposit · Withdraw · InActive · Block Betting · Block Casino · Statement · Reset Password</div>${back()}`;
+  const list=scopedClients();
+  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="state.createClient=true;render()">＋ CREATE</button><button class="blue-btn" onclick="render()">UPDATE LIST</button></div>${state.createClient?createClientForm():''}<div class="table-scroll"><table class="bo-table"><thead><tr><th>#</th><th>CODE</th><th>NAME</th><th>AGENT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>CLIENT COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map((p,i)=>`<tr><td>${i+1}</td><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>${p.createdAt?p.createdAt.slice(0,10):'09-09-2026'}</td><td>${p.share||20}%</td><td>••••</td><td><button class="blue-btn" onclick="openExposure('${p.id}')">0.00</button></td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${p.id}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="12" class="empty-cell">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Blue plus opens Deposit · Withdraw · InActive · Block Betting · Block Casino · Edit · Statement · Account Operations · Login Report · Reset Password.</div>${state.staffModal?staffActionMenu(state.staffModal):''}${state.exposureUser?exposureModal(state.exposureUser):''}${back()}`;
 }
 
 /* ===== AGENT PANEL ===== */
@@ -1858,7 +1865,7 @@ function view(){
   }
   if(state.view==='clientdetails'){
     if(!state.user||!['agent','master','supermaster'].includes(state.user.role)) return shell(home());
-    return clientDetails();
+    return shell(clientDetails());
   }
   if(state.view==='super'){
     if(!state.user||state.user.role!=='supermaster') return shell(home());
