@@ -753,7 +753,7 @@ function login(){
   const title=staff?`${roleName} LOGIN`:'Please Login to Continue';
   const userLabel=staff?'User ID':'Username';
   return `<div class="login-screen">
-    <div class="logo"><img src="/logo-login.png" alt="antpro"></div>
+    <div class="logo"><img src="/assets/antpro-login.svg" alt="antpro"></div>
     ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
     <h2>${title}</h2>
     <input id="loginUser" autocomplete="username" placeholder="${userLabel}" value="" onkeydown="if(event.key==='Enter')doLogin()">
