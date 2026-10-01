@@ -725,17 +725,9 @@ function login(){
   return `<div class="login-screen">
     <div class="logo">ant<span>pro</span></div>
     <h2>Please Login to Continue</h2>
-    <input id="loginUser" placeholder="Username" value="">
-    <input id="loginPass" type="password" placeholder="Password">
-    <button onclick="doLogin()">Login ⇥</button>
-    <div style="margin-top:14px;font-size:10px;opacity:.75;text-align:left;max-width:280px;line-height:1.4">
-      <b>Demo logins:</b><br>
-      Player: <code>P2001</code> / <code>play123</code><br>
-      Agent: <code>A1001</code> / <code>agent123</code><br>
-      Master: <code>master</code> / <code>master123</code><br>
-      Super Master: <code>super</code> / <code>super123</code><br>
-      Controller: /x9k2-ns-ctrl
-    </div>
+    <input id="loginUser" autocomplete="username" placeholder="Username" value="">
+    <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password">
+    <button type="button" onclick="doLogin()">Login ⇥</button>
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
   </div>`;
 }
