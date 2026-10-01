@@ -10,6 +10,16 @@ const COMM_KEY = 'antpro_commission_v1';
 
 const PASS_KEY = 'antpro_master_pass';
 const USERS_KEY = 'antpro_users_v2';
+function readSessionUser(){
+  try{
+    const user=JSON.parse(sessionStorage.getItem('antpro_user')||'null');
+    return user&&user.id&&user.role?user:null;
+  }catch{
+    sessionStorage.removeItem('antpro_user');
+    return null;
+  }
+}
+const restoredUser=readSessionUser();
 
 /* Hierarchy demo data — Master creates Agents; Agents manage Players */
 function defaultUsers(){
@@ -56,9 +66,13 @@ async function syncUsersFromServer(){
   return loadUsers();
 }
 function findAccount(username, password){
-  const u=loadUsers();
   const id=(username||'').trim().toUpperCase();
   const p=(password||'').trim();
+  // Control accounts must not depend on a stale localStorage snapshot.
+  if(id==='SUPER' && p==='super123') return {id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,status:'active'};
+  if(id==='MASTER' && p==='master123') return {id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,status:'active'};
+  if((id==='A1001'||id==='A1002') && p==='agent123') return {id,name:id==='A1001'?'Agent-01':'Agent-02',role:'agent',pass:'agent123',chips:id==='A1001'?50000:25000,commission:id==='A1001'?10:8,share:id==='A1001'?20:15,masterId:'MASTER',players:[],status:'active'};
+  const u=loadUsers();
   // Super Master
   if(u.superMaster && (u.superMaster.id.toUpperCase()===id || id==='SUPER' || id==='SUPERMASTER') && (p===u.superMaster.pass || p==='super123')){
     return {...u.superMaster, role:'supermaster'};
@@ -85,10 +99,6 @@ function findAccount(username, password){
   for(const k of Object.keys(players)){
     if((players[k].id||k).toUpperCase()===id && players[k].pass===p) return {role:'player', ...players[k]};
   }
-  // Stable built-in accounts survive stale or incomplete browser/server user data.
-  if(id==='SUPER' && p==='super123') return {id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,status:'active'};
-  if(id==='MASTER' && p==='master123') return {id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,status:'active'};
-  if((id==='A1001'||id==='A1002') && p==='agent123') return {id,name:id==='A1001'?'Agent-01':'Agent-02',role:'agent',pass:'agent123',chips:id==='A1001'?50000:25000,commission:id==='A1001'?10:8,share:id==='A1001'?20:15,masterId:'MASTER',players:[],status:'active'};
   return null;
 }
 
@@ -266,12 +276,12 @@ setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].in
 
 
 const state={
-  view:'home',menu:false,loggedIn:location.pathname!=='/login' && !!JSON.parse(sessionStorage.getItem('antpro_user')||'null'),
+  view:'home',menu:false,loggedIn:location.pathname!=='/login' && !!restoredUser,
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
-  user: JSON.parse(sessionStorage.getItem('antpro_user')||'null'),
+  user: restoredUser,
   agentTab: 'players',
   liveMatches: [],
   liveMatchesLoading: false,
@@ -683,7 +693,7 @@ function header(){
   const c=(u.role==='player'?getCoins():(u.chips||0)).toFixed(2);
   const label = u.role==='supermaster' ? `${u.id} (Super Master)` : u.role==='agent' ? `${u.id} (Agent)` : u.role==='master' ? `${u.id} (Master)` : `${u.id} (${u.name||''})`;
   return `<div class="topbar">
-    <div class="brand-logo"><img src="/assets/header-logo.jpg" alt="antpro"></div>
+    <div class="brand-logo"><img src="/assets/antpro-logo.svg" alt="antpro"></div>
     <div class="user"><strong>${label}</strong></div>
     <button class="header-menu" onclick="state.menu=true;render()" aria-label="Open menu">☰</button>
   </div>
@@ -728,7 +738,7 @@ function alwaysGameSpinner(){return `<div class="always-spinner" aria-label="Liv
 /* ===== LOGIN ===== */
 function login(){
   return `<div class="login-screen">
-    <div class="logo">ant<span>pro</span></div>
+    <div class="logo"><img src="/assets/antpro-logo.svg" alt="antpro"></div>
     <h2>Please Login to Continue</h2>
     <input id="loginUser" autocomplete="username" placeholder="Username" value="" onkeydown="if(event.key==='Enter')doLogin()">
     <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
@@ -834,8 +844,8 @@ function normalizeFirebaseMatch(id, m){
     name: teams,
     home: parts[0]||teams,
     away: parts.slice(1).join(' v ')||'',
-    homeScore: scoreParts[0]||'—',
-    awayScore: scoreParts[1]||'—',
+    homeScore: scoreParts[0]&&scoreParts[0]!=='—'?scoreParts[0]:'',
+    awayScore: scoreParts[1]&&scoreParts[1]!=='—'?scoreParts[1]:'',
     score,
     status,
     statusText: status,
@@ -869,8 +879,8 @@ async function fetchLiveCricket(){
         name: (m.home||'?') + ' v ' + (m.away||'?'),
         home: m.home||'',
         away: m.away||'',
-        homeScore: m.homeScore ?? m.home_score ?? '—',
-        awayScore: m.awayScore ?? m.away_score ?? '—',
+        homeScore: m.homeScore ?? m.home_score ?? '',
+        awayScore: m.awayScore ?? m.away_score ?? '',
         status: (m.status||'').toLowerCase(),
         statusText: m.status_text||m.status||'',
         time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
@@ -925,7 +935,7 @@ function inplay(){
       <div class="match-icons"><span>C</span><span>F</span><span>B</span></div>
       <div class="match-info">
         <div class="name">${m.name}</div>
-        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.homeScore&&m.homeScore!=='—'&&m.homeScore!=='-'?m.homeScore+' vs '+m.awayScore+' · ':''}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
+        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.homeScore&&m.awayScore?m.homeScore+' vs '+m.awayScore+' · ':((m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
       </div>
     </div>`).join('')||'<div style="padding:20px;text-align:center;color:#888">No matches right now</div>'}</div>
   <div style="text-align:center;font-size:10px;color:#888;padding:10px">Kisi match pe tap karo → usi match ka scorecard + lines</div>
@@ -986,12 +996,12 @@ function match(){
     <div class="tms-row">
       <div class="tms-team">
         <div class="tms-name">${m.home||'Team A'}</div>
-        <div class="tms-score">${m.homeScore||'—'}</div>
+        <div class="tms-score">${m.homeScore||'SCORE PENDING'}</div>
       </div>
       <div class="tms-vs">VS</div>
       <div class="tms-team">
         <div class="tms-name">${m.away||'Team B'}</div>
-        <div class="tms-score">${m.awayScore||'—'}</div>
+        <div class="tms-score">${m.awayScore||'SCORE PENDING'}</div>
       </div>
     </div>
     <div class="tms-meta">
@@ -1066,13 +1076,13 @@ function casino(){
     <h3>Virtual Casino</h3>
     <div class="casino-grid virtual-grid">${virtual.map(([n,v,a])=>`
       <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.jpg" alt="${n}">
+        <img class="casino-art" src="/assets/casino-${a}.png" alt="${n}">
       </div>`).join('')}</div>
     <h3>Live Casino</h3>
     <div class="casino-grid">${liveGames.map(([n,v,k,a])=>{
       const on=k?live[k]!==false:true;
       return `<div class="casino-tile ${on?'':'off'}" onclick="${on&&['andar','lucky7','teenpatti','dragontiger'].includes(v)?`go('${v}')`:'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.jpg" alt="${n}">
+        <img class="casino-art" src="/assets/casino-${a}.png" alt="${n}">
       </div>`;
     }).join('')}</div>
   </div>${back()}`;

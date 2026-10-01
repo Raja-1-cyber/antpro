@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 210" role="img" aria-labelledby="title desc">
+  <title id="title">antpro</title>
+  <desc id="desc">antpro wordmark in gold and charcoal</desc>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd75a"/>
+      <stop offset="1" stop-color="#f3a900"/>
+    </linearGradient>
+  </defs>
+  <text x="8" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-12" fill="url(#gold)">ant</text>
+  <text x="283" y="157" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="900" letter-spacing="-12" fill="#24211d">pro</text>
+</svg>
