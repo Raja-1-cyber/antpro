@@ -849,7 +849,11 @@ async function fetchLiveCricket(){
     const firebaseRes = await fetch('/api/firebase/live',{cache:'no-store'});
     if(firebaseRes.ok){
       const firebaseData=await firebaseRes.json();
-      list=Object.entries(firebaseData.live_matches||{}).map(([id,m])=>normalizeFirebaseMatch(id,m));
+      const firebaseEntries=Object.entries(firebaseData.live_matches||{});
+      const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>Math.max(max,Number(m?.updated_at)||0),0);
+      const firebaseFresh=newestFirebaseUpdate>0 && (Date.now()-newestFirebaseUpdate)<120000;
+      if(firebaseFresh) list=firebaseEntries.map(([id,m])=>normalizeFirebaseMatch(id,m));
+      else console.warn('Ignoring stale Firebase scraper snapshot; using fresh cricket feed');
     }
     if(!list.length){
       const res = await fetch('/api/cricket/matches',{cache:'no-store'});
