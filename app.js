@@ -83,8 +83,6 @@ function findAccount(username, password){
   for(const k of Object.keys(u.players||{})){
     if(u.players[k].id.toUpperCase()===id && u.players[k].pass===p) return {role:'player', ...u.players[k]};
   }
-  // default demo player login any other
-  if(id && p) return {role:'player', id:id||'GUEST', name:id||'Guest', chips:getCoins(), agentId:null, pass:p};
   return null;
 }
 
