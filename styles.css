@@ -48,7 +48,7 @@ body{background:#111;min-height:100vh}
 .login-screen{min-height:100vh;max-width:430px;margin:0 auto;background:linear-gradient(180deg,#453d20 0%,#6b581d 34%,#cf8d08 76%,#ffb51b 100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:18vh 24px 28px;color:#211d17}
 .login-screen .logo{width:min(82vw,310px);height:84px;margin-bottom:18px;filter:drop-shadow(1px 2px 0 #6a4a0666)}
 .login-screen .login-wordmark{display:flex;align-items:center;justify-content:center;gap:0;font-family:Arial,Helvetica,sans-serif;font-size:78px;line-height:.82;font-weight:900;letter-spacing:-7px;white-space:nowrap;overflow:visible}
-.login-screen .login-wordmark span{color:#f2b72d}.login-screen .login-wordmark b{color:#fff4c2;font-weight:900}
+.login-screen .login-wordmark span{display:inline-block!important;color:#f2b72d!important;text-shadow:1px 2px 0 #6a4a06!important}.login-screen .login-wordmark .wordmark-pro{color:#fff4c2!important}
 .login-screen .logo img{display:block;width:100%;height:auto}
 .login-screen h2{font-size:22px;line-height:1.1;font-weight:400;color:#fff;margin-bottom:26px;white-space:nowrap}
 .login-screen input{width:100%;max-width:382px;height:56px;padding:0 14px;margin:0 0 14px;border:1px solid #d7d7d7;border-radius:0;background:#fff;color:#222;font-size:18px}

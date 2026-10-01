@@ -753,7 +753,7 @@ function login(){
   const title=staff?`${roleName} LOGIN`:'Please Login to Continue';
   const userLabel=staff?'User ID':'Username';
   return `<div class="login-screen">
-    <div class="logo login-wordmark" aria-label="antpro"><span>ant</span><b>pro</b></div>
+    <div class="logo login-wordmark" aria-label="antpro"><span class="wordmark-ant">ant</span><span class="wordmark-pro">pro</span></div>
     ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
     <h2>${title}</h2>
     <input id="loginUser" autocomplete="username" placeholder="${userLabel}" value="" onkeydown="if(event.key==='Enter')doLogin()">
