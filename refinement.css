@@ -108,3 +108,37 @@
 .video-scorecard td.name-col{font-weight:700;color:#202a52}
 .video-scorecard thead:nth-of-type(2) th{background:#202943;color:#fff}
 .video-scorecard tbody tr:nth-child(even){background:#fafafa}
+
+/* ===== EXACT VIDEO MATCH: Hierarchy / Master / Agent panels ===== */
+.hier-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;background:#eee}
+.hier-btn{background:#7a5c00;background:linear-gradient(180deg,#9a7a00,#6b5200);color:#fff;border:0;border-radius:10px;padding:14px 10px;font-size:13px;font-weight:700;text-align:center;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.25);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:64px}
+.hier-btn:active{transform:scale(.97)}
+.hier-btn .icon{font-size:22px;line-height:1}
+.hier-btn small{font-size:11px;font-weight:600;opacity:.95}
+.hier-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 12px;background:#eee}
+.hier-stat{background:#7a5c00;background:linear-gradient(180deg,#9a7a00,#6b5200);color:#fff;border-radius:10px;padding:12px 8px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.hier-stat .val{font-size:16px;font-weight:800;display:block}
+.hier-stat .lbl{font-size:10px;margin-top:3px;opacity:.9}
+.hier-header{background:#6b5200;color:#fff;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:14px}
+.hier-header .back{background:#1683c7;color:#fff;border:0;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.hier-toolbar{display:flex;gap:10px;padding:10px 12px;background:#fff;justify-content:flex-start}
+.hier-toolbar button{background:#1683c7;color:#fff;border:0;border-radius:4px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.hier-table{width:100%;border-collapse:collapse;background:#fff;font-size:12px}
+.hier-table th{background:#6b5200;color:#fff;padding:8px 6px;font-size:11px;text-align:left;white-space:nowrap}
+.hier-table td{padding:9px 6px;border-bottom:1px solid #e8e8e8;vertical-align:middle}
+.hier-table tr:nth-child(even){background:#fafafa}
+.hier-table .code{font-weight:700;color:#222}
+.hier-table .name-link{color:#0b66c3;font-weight:700;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.hier-table .name-link:hover{text-decoration:underline}
+.hier-table .super{color:#555;font-size:11px}
+.hier-table .plus{background:#1683c7;color:#fff;border:0;width:22px;height:22px;border-radius:3px;font-weight:900;font-size:14px;cursor:pointer;line-height:1}
+.hier-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
+.hier-modal{background:#fff;border-radius:8px;width:min(92vw,340px);max-height:80vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.hier-modal-head{background:#6b5200;color:#fff;padding:12px 14px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.hier-modal-head .x{background:transparent;border:0;color:#fff;font-size:20px;cursor:pointer;line-height:1}
+.hier-modal-body{padding:14px}
+.hier-modal-btn{display:block;width:100%;background:linear-gradient(180deg,#9a7a00,#6b5200);color:#fff;border:0;border-radius:10px;padding:14px;margin:0 0 10px;font-size:14px;font-weight:700;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px}
+.hier-modal-btn:last-child{margin-bottom:0}
+.hier-modal-close{display:block;width:100%;background:#6b5200;color:#fff;border:0;border-radius:6px;padding:10px;font-weight:700;margin-top:8px;cursor:pointer}
+.exposure-row-even{background:#fff}
+.exposure-row-odd{background:#f8d7da}
