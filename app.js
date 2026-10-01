@@ -7,6 +7,7 @@ const BETS_KEY = 'antpro_bets_v1';
 const MARQUEE_KEY = 'antpro_marquee_v1';
 const STMT_KEY = 'antpro_statements_v1';
 const COMM_KEY = 'antpro_commission_v1';
+const AUDIT_KEY = 'antpro_audit_v1';
 
 const PASS_KEY = 'antpro_master_pass';
 const USERS_KEY = 'antpro_users_v2';
@@ -344,6 +345,12 @@ function loadStatements(){try{return JSON.parse(localStorage.getItem(STMT_KEY)||
 function saveStatements(a){localStorage.setItem(STMT_KEY,JSON.stringify((a||[]).slice(0,500)))}
 function loadCommissions(){try{return JSON.parse(localStorage.getItem(COMM_KEY)||'[]')}catch{return []}}
 function saveCommissions(a){localStorage.setItem(COMM_KEY,JSON.stringify((a||[]).slice(0,500)))}
+function loadAudit(){try{return JSON.parse(localStorage.getItem(AUDIT_KEY)||'[]')}catch{return []}}
+function audit(action,target,detail=''){
+  const actor=state.user&&state.user.id||'SYSTEM';
+  const rows=loadAudit(); rows.unshift({ts:Date.now(),actor,action,target,detail});
+  localStorage.setItem(AUDIT_KEY,JSON.stringify(rows.slice(0,300)));
+}
 function uid(){return 'B'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*999)}
 function findUserById(id){
   const data=loadUsers(); const ID=(id||'').toUpperCase();
@@ -368,6 +375,7 @@ function isBlocked(id){const s=userStatus(id); return s==='blocked'||s==='suspen
 function setUserStatus(id, status){
   if(!['active','blocked','suspended'].includes(status)) return;
   updateUserFields(id, {status});
+  audit('STATUS',id,status);
   toast(id+' → '+status.toUpperCase());
   render();
 }
@@ -1370,10 +1378,12 @@ function superPanel(){
           <small>${m.name||''} · ${agCount} agents</small>
           <small style="display:block;color:#5c3d1e">Share ${m.share||0}% · Comm ${m.commission||0}%</small>
         </div>
-        <div class="ap-chips">${(m.chips||0).toLocaleString()}</div>
+          <div class="ap-chips">${(m.chips||0).toLocaleString()} <button class="action-trigger" onclick="state.staffModal='${m.id}';render()">＋</button></div>
       </div>`;
     }).join(''):'<div style="padding:16px;text-align:center;color:#888">No masters yet</div>'}
   </div>
+  <div class="section-bar">AUDIT HISTORY</div>
+  <div class="table-scroll"><table class="bo-table"><thead><tr><th>TIME</th><th>ACTOR</th><th>ACTION</th><th>TARGET</th><th>DETAIL</th></tr></thead><tbody>${loadAudit().slice(0,12).map(a=>`<tr><td>${new Date(a.ts).toLocaleTimeString('en-IN')}</td><td>${a.actor}</td><td>${a.action}</td><td>${a.target}</td><td>${a.detail||'—'}</td></tr>`).join('')||'<tr><td colspan="5" class="empty-cell">No audited actions yet</td></tr>'}</tbody></table></div>
   <div class="view-title">CREATE MASTER (New Book / Game)</div>
   <div class="form-box">
     <p style="font-size:10px;color:#666;margin-bottom:8px">Har master alag book · Share 95%+ dono ko de sakte ho (apna-apna book)</p>
@@ -1390,7 +1400,7 @@ function superPanel(){
     <button class="menu-btn" style="margin:0" onclick="go('inplay')">IN PLAY</button>
     <button class="menu-btn" style="margin:0" onclick="go('casino')">CASINO</button>
   </div>
-  ${back()}`;
+  ${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
 }
 function superCreateMaster(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return;}
@@ -1406,6 +1416,7 @@ function superCreateMaster(){
   if(data.masters[id]){toast('Master ID exists');return;}
   data.masters[id]={id,name:name||id,role:'master',pass,chips,commission:comm,share,superId:'SUPER',agents:[]};
   saveUsers(data);
+  audit('CREATE MASTER',id,`share ${share}% · commission ${comm}%`);
   toast('Master '+id+' created · Share '+share+'%');
   render();
 }
@@ -1413,12 +1424,14 @@ function superCreateMaster(){
 
 function hierarchy(){
   const data=loadUsers();
-  const agents=Object.values(data.agents||{});
+  const role=state.user&&state.user.role;
+  const masterId=(state.user&&state.user.id||'').toUpperCase();
+  const agents=Object.values(data.agents||{}).filter(a=>role==='supermaster'||(a.masterId||'').toUpperCase()===masterId);
   return `${topBtn()}
   <div class="table-toolbar"><button class="blue-btn" onclick="state.staffModal='hierarchy-picker';render()">SELECT MASTER VIEW</button><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENT DETAILS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENT DETAILS</button></div>
   <div class="view-title">MASTER & AGENT HIERARCHY</div>
   <div class="master-card">
-    <div class="role-chip">MASTER</div>
+    <div class="role-chip">${role==='supermaster'?'SUPER MASTER':'MASTER'}</div>
     <div class="master-row"><strong>${(state.user&&state.user.id)||'MASTER'}</strong><span class="unlimited">Share ${(state.user&&state.user.share)||95}%</span></div>
     <p style="font-size:10px;color:#666;margin-top:6px">Master creates Agents · sets Commission % & Share %</p>
   </div>
@@ -1469,6 +1482,7 @@ function masterCreateAgent(){
   data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',players:[]};
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
+  audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'}`);
   toast('Agent '+id+' created');
   render();
 }
@@ -1485,6 +1499,7 @@ function masterAssignPlayer(){
   if(!data.agents[aid].players) data.agents[aid].players=[];
   if(!data.agents[aid].players.includes(pid)) data.agents[aid].players.push(pid);
   saveUsers(data);
+  audit('ASSIGN CLIENT',pid,`agent ${aid}`);
   toast('Player '+pid+' → Agent '+aid);
   render();
 }
@@ -1596,7 +1611,7 @@ function staffHome(){
   const masters=Object.values(data.masters||{});const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
   const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='master'?agents.filter(a=>(a.masterId||'').toUpperCase()===u.id.toUpperCase()).length+players.filter(p=>agents.some(a=>(a.id||'').toUpperCase()===(p.agentId||'').toUpperCase()&&(a.masterId||'').toUpperCase()===u.id.toUpperCase())).length:masters.length+agents.length+players.length;
   const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['MEMBERS',memberCount],['MY SHARE',(u.share||92)+''],['COMPANY SHARE',(100-(u.share||92))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:[['MASTERS',masters.length],['AGENTS',agents.length],['CLIENTS',players.length],['TOTAL CHIPS',players.reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
-  const actions=role==='agent'?[['AGENT','clientdetails','♙'],['SPORTS DETAILS','inplay','▣'],['LEDGER','ledger','◈'],['CASH TRANSACTION','statement','₹'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER','hierarchy','♙'],['SPORTS DETAILS','inplay','▣'],['LEDGER','ledger','◈'],['CASH TRANSACTION','statement','₹'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTERS','hierarchy','▣'],['LEDGER','ledger','◈'],['REPORTS','livebets','▤'],['SETTING','password','⚙'],['LOGOUT','logout','↪']];
+  const actions=role==='agent'?[['AGENT DETAIL','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER DETAIL','hierarchy','♙'],['AGENT / CLIENT','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['USER CONTROL','usermgmt','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTER DETAILS','hierarchy-details','▣'],['AGENT DETAILS','hierarchy-details','♙'],['CLIENT DETAILS','clientdetails','♙'],['LEDGER','ledger','₹'],['REPORTS','livebets','▥'],['COMM. REPORT','commission','%'],['USER CONTROL','usermgmt','⚙'],['AUDIT / SETTINGS','super','⚙'],['LOGOUT','logout','↪']];
   return `${topBtn()}<div class="bo-dashboard">
     <div class="bo-identity"><strong>${u.id||'USER'}</strong><span>You are ${role==='agent'?'Agent':role==='master'?'Master':'Super Master'}</span></div>
     <div class="bo-actions">${actions.map(([label,view,icon])=>`<button class="bo-action-card" onclick="${view==='logout'?'logoutToRole()':`go('${view}')`}"><span class="bo-icon">${icon}</span><b>${label}</b></button>`).join('')}</div>
@@ -1608,14 +1623,14 @@ function boAction(id,action){
   const u=findUserById(id);if(!u){toast('User not found');return}
   if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
-    const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});toast(action+' '+n+' chips · '+id);
+    const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});audit(action.toUpperCase(),id,`${n} demo chips`);toast(action+' '+n+' chips · '+id);
   }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
   else if(action==='inactive'){setUserStatus(id,'suspended');toast('Demo user inactive · '+id)}
   else if(action==='exposure'){openExposure(id);return}
-  else if(action==='settlement'){toast('Demo settlement recorded · '+id)}
+  else if(action==='settlement'){audit('SETTLEMENT',id,'demo ledger settlement');toast('Demo settlement recorded · '+id)}
   else if(action==='edit'||action==='account'||action==='loginreport'){toast(action.toUpperCase()+' demo view · '+id)}
-  else if(action==='casino'){updateUserFields(id,{casinoBlocked:true});toast('Casino blocked · '+id)}
-  else if(action==='reset'){updateUserFields(id,{pass:u.role==='player'?'play123':u.role==='agent'?'agent123':'master123'});toast('Password reset · '+id)}
+  else if(action==='casino'){updateUserFields(id,{casinoBlocked:true});audit('BLOCK CASINO',id);toast('Casino blocked · '+id)}
+  else if(action==='reset'){updateUserFields(id,{pass:u.role==='player'?'play123':u.role==='agent'?'agent123':'master123'});audit('RESET PASSWORD',id,'demo default');toast('Password reset · '+id)}
   else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
   render();
 }
@@ -1857,10 +1872,17 @@ function toggleGame(key){
 function changeMasterPass(){const v=((document.getElementById('newMasterPass')||{}).value||'').trim();if(v.length<6){toast('Min 6 chars');return}localStorage.setItem(PASS_KEY,v);toast('Password changed')}
 
 function hierarchyDetails(){
-  const layer=state.hierarchyLayer||'super';const data=loadUsers();
-  const rows=layer==='super'?Object.values(data.masters||{}).map(m=>[m.id,m.name||'—','MASTER',m.share||95,m.commission||5,m.chips||0,m.status||'active']):layer==='agent'?Object.values(data.agents||{}).map(a=>[a.id,a.name||'—',a.masterId||'MASTER',a.share||20,a.commission||10,a.chips||0,a.status||'active']):Object.values(data.players||{}).map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
+  const layer=state.hierarchyLayer||'super';const data=loadUsers();const role=state.user&&state.user.role;const id=(state.user&&state.user.id||'').toUpperCase();
+  let rows=[];
+  if(layer==='super'){
+    rows=role==='supermaster'?[...(Object.values(data.masters||{}).map(m=>[m.id,m.name||'—',m.superId||'SUPER',m.share||95,m.commission||5,m.chips||0,m.status||'active']))]:[[data.superMaster?.id||'SUPER',data.superMaster?.name||'Super Master','PLATFORM','—','—',data.superMaster?.chips||0,data.superMaster?.status||'active']];
+  }else if(layer==='agent'){
+    rows=Object.values(data.agents||{}).filter(a=>role==='supermaster'||(a.masterId||'').toUpperCase()===id).map(a=>[a.id,a.name||'—',a.masterId||'MASTER',a.share||20,a.commission||10,a.chips||0,a.status||'active']);
+  }else{
+    rows=scopedClients().map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
+  }
   const title=layer==='super'?'SUPER DETAILS':layer==='agent'?'AGENT DETAILS':'CLIENT DETAILS';
-  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="blue-btn" onclick="toast('Details opened for ${r[0]}')">＋</button></td></tr>`).join('')||'<tr><td colspan="8">No records</td></tr>'}</tbody></table></div>${back()}`;
+  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${r[0]}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty-cell">No records in this hierarchy scope</td></tr>'}</tbody></table></div>${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
 }
 
 /* ===== ROUTER ===== */
