@@ -11,6 +11,8 @@ const AUDIT_KEY = 'antpro_audit_v1';
 
 const PASS_KEY = 'antpro_master_pass';
 const USERS_KEY = 'antpro_users_v2';
+const USERS_DIRTY_KEY = 'antpro_users_dirty_v1';
+let usersSaveChain = Promise.resolve();
 function readSessionUser(){
   try{
     const user=JSON.parse(sessionStorage.getItem('antpro_user')||'null');
@@ -62,9 +64,13 @@ function loadUsers(){
   return d;
 }
 function saveUsers(u){
-  try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
-  // permanent server + Firebase mirror (fire-and-forget)
-  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:u})}).catch(()=>{});
+  const snapshot=JSON.parse(JSON.stringify(u));
+  try{localStorage.setItem(USERS_KEY,JSON.stringify(snapshot));localStorage.setItem(USERS_DIRTY_KEY,String(Date.now()))}catch{}
+  usersSaveChain=usersSaveChain.then(async()=>{
+    try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:snapshot})});if(!r.ok)throw new Error('users save '+r.status);try{localStorage.removeItem(USERS_DIRTY_KEY)}catch{};return true}
+    catch(e){console.warn('users save failed; local copy retained',e);return false}
+  });
+  return usersSaveChain;
 }
 function hierarchyRoot(data=loadUsers()){return data.rootMaster||data.masters?.MASTER||{id:'MASTER',name:'Master',role:'master',chips:0,share:100,commission:0}}
 function hierarchySuperMasters(data=loadUsers()){
@@ -82,13 +88,11 @@ function hierarchyClientIds(data=loadUsers(), superId=''){
 }
 async function syncUsersFromServer(){
   try{
-    const r=await fetch('/api/users',{cache:'no-store'});
-    const d=await r.json();
-    if(d&&d.ok&&d.users&&d.users.superMaster){
-      localStorage.setItem(USERS_KEY,JSON.stringify(d.users));
-      return d.users;
-    }
-  }catch{}
+    const local=loadUsers();
+    if(localStorage.getItem(USERS_DIRTY_KEY)){await saveUsers(local);return local}
+    const r=await fetch('/api/users',{cache:'no-store'});const d=await r.json();
+    if(d&&d.ok&&d.users&&d.users.superMaster){localStorage.setItem(USERS_KEY,JSON.stringify(d.users));return d.users}
+  }catch(e){console.warn('users sync failed',e)}
   return loadUsers();
 }
 function findAccount(username, password){
@@ -1458,8 +1462,12 @@ function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('Agent ID + Password required');return}
-  const data=loadUsers();if(data.agents[id]){toast('Agent ID exists');return}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user.parentMasterId||'MASTER'),superId:state.user.id,players:[],status:'active'};saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
+  const data=loadUsers();if(!data.agents)data.agents={};if(data.agents[id]){toast('Agent ID exists');return}
+  const masterId=state.user.parentMasterId||'MASTER';
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};
+  if(!data.masters)data.masters={};
+  if(data.masters[masterId]){if(!Array.isArray(data.masters[masterId].agents))data.masters[masterId].agents=[];if(!data.masters[masterId].agents.includes(id))data.masters[masterId].agents.push(id)}
+  saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
@@ -1472,7 +1480,7 @@ function masterCreateAgent(){
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(data.agents[id]){toast('Agent ID exists');return;}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',players:[]};
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',superId:'SUPER',players:[],status:'active',createdAt:new Date().toISOString()};
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
   audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'}`);
