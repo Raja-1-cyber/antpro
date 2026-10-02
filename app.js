@@ -737,13 +737,19 @@ function login(){
     <div class="logo login-wordmark" aria-label="antpro"><span class="wordmark-ant">ant</span><span class="wordmark-pro">pro</span></div>
     ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
     <h2>${title}</h2>
-    <input id="loginUser" autocomplete="username" placeholder="${userLabel}" value="" onkeydown="if(event.key==='Enter')doLogin()">
-    <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
-    ${staff?`<input id="loginOtp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" onkeydown="if(event.key==='Enter')doLogin()">`:''}
+    <input id="loginUser" name="antpro-login-id" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${userLabel}" value="" onkeydown="return loginKeydown(event)">
+    <input id="loginPass" name="antpro-login-secret" autocomplete="new-password" type="password" placeholder="Password" onkeydown="return loginKeydown(event)">
+    ${staff?`<input id="loginOtp" name="antpro-login-otp" autocomplete="off" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" onkeydown="return loginKeydown(event)">`:''}
     <button type="button" onclick="doLogin()">${staff?'Verify OTP':'Login'} ⇥</button>
     ${staff?`<div class="login-role-links"><a href="/login">Client</a><a href="/agent-login">Agent</a><a href="/master-login">Master</a><a href="/supermaster-login">Super Master</a></div>`:''}
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
   </div>`;
+}
+function loginKeydown(event){
+  event.preventDefault();
+  event.stopPropagation();
+  if(event.key==='Enter')doLogin();
+  return false;
 }
 function doLogin(){
   const userEl=document.getElementById('loginUser');
