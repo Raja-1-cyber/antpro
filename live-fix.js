@@ -1,4 +1,4 @@
-/* AntPro live-fix — AB joker + Teen no-Tie + DT Tie 11x + AB result 4s */
+/* AntPro live-fix — AB joker + Teen no-Tie + DT Tie 11x + AB result 4s + DT gap 4s */
 (function () {
   'use strict';
   window.getGamesLive = function () {
@@ -145,13 +145,13 @@
     s.textContent = '.ab-joker-row{display:flex;flex-direction:column;align-items:center;margin:6px 0 14px;padding:8px 12px;background:linear-gradient(180deg,#1a1508 0%,#0d1117 100%);border:1px solid #f0c04055;border-radius:10px}.ab-joker-label{color:#ffe566!important;font-weight:900;font-size:12px;letter-spacing:2px;margin-bottom:4px;text-shadow:0 0 8px #f0c04088}.ab-joker-card .p-card{transform:scale(1.15);box-shadow:0 0 0 3px #f0c040,0 4px 16px #000a;margin:4px}.ab-sides-row{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;width:100%}.ab-side{display:flex;flex-direction:column;align-items:center}';
     document.head.appendChild(s);
   }
-  console.log('[AntPro] AB joker + Teen no-Tie + AB result 4s');
+  console.log('[AntPro] AB joker + Teen no-Tie + DT gap 4s');
 })();
 
 (function () {
   'use strict';
   var CFG = {'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
-  var GAP_AB=4000, GAP_TEEN=4000, GAP_DT=2500, RESULT_HOLD=4000, RESULT_HOLD_DT=3000, RESULT_HOLD_TEEN=3000, RESULT_HOLD_L7=2000, L7_FLIP_DELAY=2000, roundSeen={}, runToken={};
+  var GAP_AB=4000, GAP_TEEN=4000, GAP_DT=4000, RESULT_HOLD=4000, RESULT_HOLD_DT=3000, RESULT_HOLD_TEEN=3000, RESULT_HOLD_L7=2000, L7_FLIP_DELAY=2000, roundSeen={}, runToken={};
   function cfg(k){return CFG[k]||{duration:20,lock:0}}
   window.applyCascade=function(){};
   state.previousResults=state.previousResults||JSON.parse(localStorage.getItem('antpro_previous_results')||'{}');
@@ -188,5 +188,5 @@
   window.canPlaceBet=function(k){var r=cur(k),c=cfg(k);return r.phase==='betting'&&elapsed(r)<c.duration-c.lock&&!active(k)};
   window.__antproTimerTick=function(){if(!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if((r.phase==='locked'||r.phase==='revealing')&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'?RESULT_HOLD_DT:k==='teen-patti'?RESULT_HOLD_TEEN:k==='lucky7'?RESULT_HOLD_L7:RESULT_HOLD))newRound(k)});render()};
   setInterval(window.__antproTimerTick,500);setTimeout(window.__antproTimerTick,100);
-  console.log('[AntPro] AB result hold 4s | Teen no-Tie | DT Tie 11x');
+  console.log('[AntPro] AB result 4s | DT gap 4s | Teen no-Tie');
 })();
