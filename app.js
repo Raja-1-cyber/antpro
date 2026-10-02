@@ -746,10 +746,13 @@ function login(){
   </div>`;
 }
 function loginKeydown(event){
-  event.preventDefault();
-  event.stopPropagation();
-  if(event.key==='Enter')doLogin();
-  return false;
+  if(event.key==='Enter'){
+    event.preventDefault();
+    event.stopPropagation();
+    doLogin();
+    return false;
+  }
+  return true;
 }
 function doLogin(){
   const userEl=document.getElementById('loginUser');
