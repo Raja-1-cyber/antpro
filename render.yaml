@@ -13,6 +13,9 @@ services:
         value: "3000"
       - key: FIREBASE_DATABASE_URL
         sync: false
+      # Same service-account JSON used by the scraper; required for durable user writes.
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
 
   # Live cricket scraper → Firebase (24/7 worker)
   - type: worker

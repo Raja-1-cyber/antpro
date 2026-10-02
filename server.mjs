@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const dataDir=path.join(root,'data');
@@ -9,6 +10,23 @@ const marqueeFile=path.join(dataDir,'marquee.json');
 const usersFile=path.join(dataDir,'users.json');
 const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app';
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
+let firebaseToken='',firebaseTokenExpires=0;
+const b64url=value=>Buffer.from(value).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+async function firebaseAuthHeaders(){
+  const raw=process.env.FIREBASE_CREDENTIALS_JSON;
+  if(!raw)return {};
+  if(firebaseToken&&Date.now()<firebaseTokenExpires-60000)return {Authorization:`Bearer ${firebaseToken}`};
+  const cred=JSON.parse(raw),now=Math.floor(Date.now()/1000);
+  const head=b64url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const body=b64url(JSON.stringify({iss:cred.client_email,scope:'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600}));
+  const input=`${head}.${body}`;
+  const signature=crypto.createSign('RSA-SHA256').update(input).sign(String(cred.private_key).replace(/\\n/g,'\n'),'base64url');
+  const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion:`${input}.${signature}`})});
+  if(!tokenRes.ok)throw new Error(`Firebase auth HTTP ${tokenRes.status}`);
+  const token=await tokenRes.json();firebaseToken=token.access_token;firebaseTokenExpires=Date.now()+Number(token.expires_in||3600)*1000;
+  return {Authorization:`Bearer ${firebaseToken}`};
+}
+async function firebaseFetch(pathname,options={}){const auth=await firebaseAuthHeaders();return fetch(`${FIREBASE_DB}${pathname}`,{...options,headers:{...(options.headers||{}),...auth}})}
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
 const GAME_DEFS={'andar-bahar':{duration:20,lockSeconds:5},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:5},'dragon-tiger':{duration:15,lockSeconds:4}};
@@ -23,8 +41,8 @@ function loadUsersFile(){try{const u=JSON.parse(fs.readFileSync(usersFile,'utf8'
 function normalizeUsers(u){u=u||{};u.superMasters=u.superMasters||{};u.masters=u.masters||{};u.agents=u.agents||{};u.players=u.players||{};if(!u.masters.MASTER)u.masters.MASTER={id:'MASTER',name:'Root Master',role:'master',pass:'master123',chips:0,agents:[],status:'active'};Object.values(u.masters).forEach(m=>{m.agents=[];m.superMasters=[];m.share=typeof m.share==='number'?m.share:100});Object.values(u.superMasters).forEach(sm=>{sm.agents=[];sm.share=typeof sm.share==='number'?sm.share:0;const m=u.masters[sm.parentMasterId||'MASTER'];if(m)m.superMasters.push(sm.id)});Object.values(u.agents).forEach(a=>{a.players=[];a.share=typeof a.share==='number'?a.share:0;const m=u.masters[a.masterId||'MASTER'];if(m&&!m.agents.includes(a.id))m.agents.push(a.id);const sm=u.superMasters[a.superId];if(sm&&!sm.agents.includes(a.id))sm.agents.push(a.id)});Object.values(u.players).forEach(p=>{p.share=typeof p.share==='number'?p.share:0;const a=u.agents[p.agentId];if(a&&!a.players.includes(p.id))a.players.push(p.id)});return u}
 function mergeUsers(current,incoming){const merged={...(current||{}),...(incoming||{})};for(const bucket of ['masters','superMasters','agents','players'])merged[bucket]={...((current&&current[bucket])||{}),...((incoming&&incoming[bucket])||{})};if(!incoming?.superMaster&&current?.superMaster)merged.superMaster=current.superMaster;return normalizeUsers(merged)}
 function saveUsersFile(u){u=normalizeUsers(u);const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(u,null,2));fs.renameSync(tmp,usersFile)}
-async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
-async function restoreUsersFromFirebase(){try{const r=await fetch(FIREBASE_DB+'/users.json',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!r.ok)return false;const remote=await r.json();if(!remote||!remote.masters?.MASTER)return false;if(remote.superMaster&&typeof remote.superMaster==='object'){remote.superMasters={...(remote.superMasters||{}),[remote.superMaster.id||'SUPER']:remote.superMaster}}const local=loadUsersFile();const merged=mergeUsers(local,remote);saveUsersFile(merged);console.log(`restored users from Firebase: ${Object.keys(merged.agents).length} agents, ${Object.keys(merged.players).length} clients`);return true}catch(e){console.warn('firebase users restore skipped',e.message);return false}}
+async function mirrorUsersToFirebase(u){try{const r=await firebaseFetch('/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});if(!r.ok)throw new Error(`Firebase write HTTP ${r.status}`);console.log('users mirrored to Firebase')}catch(e){console.warn('firebase users mirror failed',e.message)}}
+async function restoreUsersFromFirebase(){try{const r=await firebaseFetch('/users.json',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!r.ok)return false;const remote=await r.json();if(!remote||!remote.masters?.MASTER)return false;if(remote.superMaster&&typeof remote.superMaster==='object'){remote.superMasters={...(remote.superMasters||{}),[remote.superMaster.id||'SUPER']:remote.superMaster}}const local=loadUsersFile();const merged=mergeUsers(local,remote);saveUsersFile(merged);console.log(`restored users from Firebase: ${Object.keys(merged.agents).length} agents, ${Object.keys(merged.players).length} clients`);return true}catch(e){console.warn('firebase users restore skipped',e.message);return false}}
 const usersReady=restoreUsersFromFirebase();
 async function fetchFirebaseLive(){
   try{

@@ -42,6 +42,7 @@ Render pe JSON env var se jayega.
 |-----|--------|
 | `NODE_ENV` | `production` |
 | `FIREBASE_DATABASE_URL` | `https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app` |
+| `FIREBASE_CREDENTIALS_JSON` | Same complete service-account JSON used by the scraper |
 
 6. **Create Web Service** → URL milega: `https://antpro-web-xxxx.onrender.com`
 
