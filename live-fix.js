@@ -1,4 +1,4 @@
-/* AntPro live-fix — AB Andar/Bahar only; DT Tie 11x; timings locked */
+/* AntPro live-fix — AB joker center + timings + DT Tie 11x */
 (function () {
   'use strict';
   window.getGamesLive = function () {
@@ -58,7 +58,6 @@
         if (!forced && r && r.phase === 'result' && r.result) forced = r.result;
       }
     } catch (e) {}
-    // Andar Bahar: never allow Tie as result
     if (key === 'andar-bahar' && forced === 'Tie') forced = null;
     if (forced && options && options.indexOf(forced) >= 0) {
       try {
@@ -71,7 +70,6 @@
       return forced;
     }
     if (natural != null && options && options.indexOf(natural) >= 0) return natural;
-    // AB: only Andar/Bahar
     if (key === 'andar-bahar') {
       var abOpts = options.filter(function (o) { return o === 'Andar' || o === 'Bahar'; });
       if (abOpts.length) return abOpts[Math.floor(Math.random() * abOpts.length)];
@@ -150,10 +148,79 @@
     if (bet.status === 'won' || bet.status === 'lost') window.applyCascade(bet);
     return bet;
   };
-  console.log('[AntPro] live-fix guard loaded');
+
+  /* ===== ANDAR BAHAR UI — joker center prominent ===== */
+  window.andar = function andar() {
+    var live = typeof getGamesLive === 'function' ? getGamesLive()['andar-bahar'] : true;
+    if (!live) {
+      return (typeof topBtn === 'function' ? topBtn() : '') +
+        '<div class="view-title">ANDAR BAHAR</div><div style="padding:40px;text-align:center;color:#666">Offline</div>' +
+        (typeof back === 'function' ? back() : '');
+    }
+    var rid = (typeof ensureRound === 'function' && ensureRound('andar-bahar').roundId) || '—';
+    var j = state.abJoker;
+    var a = (state.andarCards && state.andarCards.andar) || [];
+    var b = (state.andarCards && state.andarCards.bahar) || [];
+    var ch = typeof cardHTML === 'function' ? cardHTML : function () { return ''; };
+    var jokerBlock =
+      '<div class="ab-joker-row">' +
+        '<div class="live-side-label ab-joker-label">★ JOKER ★</div>' +
+        '<div class="card-pair ab-joker-card">' + ch(j || null) + '</div>' +
+      '</div>';
+    var sides =
+      '<div class="ab-sides-row">' +
+        '<div class="ab-side">' +
+          '<div class="live-side-label">Andar</div>' +
+          '<div class="card-pair">' + (a.length ? a.map(ch).join('') : ch(null) + ch(null)) + '</div>' +
+        '</div>' +
+        '<div class="ab-side">' +
+          '<div class="live-side-label">Bahar</div>' +
+          '<div class="card-pair">' + (b.length ? b.map(ch).join('') : ch(null) + ch(null)) + '</div>' +
+        '</div>' +
+      '</div>';
+    var hist = (state.abHistory && state.abHistory.length ? state.abHistory : ['R','R','R','R','R','R','R','R','R','R']).slice(0, 10);
+    var bets = (state.activeBets || []).filter(function (x) { return x.type === 'AndarBahar'; }).slice(0, 5);
+    return '<div class="game-screen">' +
+      (typeof gameTop === 'function' ? gameTop('ANDAR BAHAR', rid) : '') +
+      '<div class="cards-zone live-video-stage">' +
+        '<div class="game-live-cards">' + jokerBlock + sides + '</div>' +
+        (typeof alwaysGameSpinner === 'function' ? alwaysGameSpinner() : '') +
+      '</div>' +
+      '<div class="bet-locks">' + (typeof stakeControl === 'function' ? stakeControl('andar-bahar') : '') +
+        '<div class="bet-lock-row"><div class="side">Andar</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('andar-bahar','Andar') : 0) + '</div><div class="lock" onclick="playAndarBahar(\'Andar\')">' + (typeof lockLabel === 'function' ? lockLabel('andar-bahar') : '🔒') + '</div></div>' +
+        '<div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('andar-bahar','Bahar') : 0) + '</div><div class="lock" onclick="playAndarBahar(\'Bahar\')">' + (typeof lockLabel === 'function' ? lockLabel('andar-bahar') : '🔒') + '</div></div>' +
+        '<div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go(\'casino\')">BACK</div></div>' +
+      '</div>' +
+      '<div class="completed-bets">Completed Casino Bets</div>' +
+      '<div class="section-gold result-heading"><span>Last Result</span><span>View All</span></div>' +
+      '<div class="last-result">' + hist.map(function (x) { return '<div class="result-dot">' + String(x)[0] + '</div>'; }).join('') + '</div>' +
+      '<div class="section-gold">My Bet</div>' +
+      '<table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead><tbody>' +
+      (bets.length ? bets.map(function (x) {
+        return '<tr><td>' + x.team + '</td><td>' + x.rate + '</td><td>' + x.amt + '</td><td>' + (x.result || x.profit) + '</td></tr>';
+      }).join('') : '<tr><td colspan="4" style="color:#555">—</td></tr>') +
+      '</tbody></table></div>' + (typeof back === 'function' ? back() : '');
+  };
+
+  if (!document.getElementById('antpro-ab-joker')) {
+    var s = document.createElement('style');
+    s.id = 'antpro-ab-joker';
+    s.textContent = [
+      '.ab-joker-row{display:flex;flex-direction:column;align-items:center;margin:6px 0 14px;padding:8px 12px;background:linear-gradient(180deg,#1a1508 0%,#0d1117 100%);border:1px solid #f0c04055;border-radius:10px}',
+      '.ab-joker-label{color:#ffe566!important;font-weight:900;font-size:12px;letter-spacing:2px;margin-bottom:4px;text-shadow:0 0 8px #f0c04088}',
+      '.ab-joker-card .p-card{transform:scale(1.15);box-shadow:0 0 0 3px #f0c040,0 4px 16px #000a;margin:4px}',
+      '.ab-joker-card .p-card.ghost{opacity:0.7}',
+      '.ab-sides-row{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;width:100%}',
+      '.ab-side{display:flex;flex-direction:column;align-items:center}',
+      '.game-top .g-meta{font-size:10px;color:#aaa}'
+    ].join('\n');
+    document.head.appendChild(s);
+  }
+
+  console.log('[AntPro] live-fix guard + AB joker UI');
 })();
 
-/* Timer-driven casino rounds — exact user timings */
+/* Timer-driven casino rounds */
 (function () {
   'use strict';
   var CFG = {'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
@@ -182,8 +249,7 @@
   function settleFromServer(k,t,roundId,natural){var tries=0;function poll(){if(!runAlive(k,t))return;fetch('/api/live-rounds',{cache:'no-store'}).then(function(res){return res.json()}).then(function(data){var r=data&&data[k];if(r&&r.roundId===roundId&&r.phase==='result'&&r.result)return settle(k,r.result);if(++tries<80)setTimeout(poll,250);else settle(k,natural)}).catch(function(){if(++tries<80)setTimeout(poll,250);else settle(k,natural)})}poll()}
   function settle(k,winner){var bets=(state.pendingBets&&state.pendingBets[k])||[];bets.forEach(function(b){var won=b.team===winner,p=Math.round(b.amt*(b.rate-1));if(won)syncPlayerChips(getCoins()+b.amt+p);pushSettledBet({team:b.team,type:b.type,rate:b.rate,amt:b.amt,profit:p,player:b.player,status:won?'won':'lost',result:won?'WON +'+(b.amt+p):'LOST -'+b.amt})});state.pendingBets[k]=[];state.previousResults[k]={winner:winner,at:Date.now(),history:[winner].concat((state.previousResults[k]&&state.previousResults[k].history)||[]).slice(0,10)};localStorage.setItem('antpro_previous_results',JSON.stringify(state.previousResults));try{fetch('/api/live-rounds/'+encodeURIComponent(k)+'/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({winner:winner})}).catch(function(){})}catch(e){}if(k==='andar-bahar'){state.abHistory=state.abHistory||[];state.abHistory.unshift(winner==='Andar'?'A':'B');state.andarSpinning=false}else if(k==='lucky7')state.l7Spin=false;else if(k==='teen-patti')state.tpSpin=false;else state.dtSpin=false;state.resolving[k]=false;setR(k,{phase:'result',timer:0,result:winner,resultAt:Date.now()});render();setTimeout(function(){if(!active(k))newRound(k)},k==='dragon-tiger'?RESULT_HOLD_DT:k==='teen-patti'?RESULT_HOLD_TEEN:k==='lucky7'?RESULT_HOLD_L7:RESULT_HOLD)}
   function newRound(k){var c=cfg(k),a=all(),old=a[k]||{};if(old.phase==='betting'&&old.roundId)return;var history=old.previousResults||((state.previousResults[k]&&state.previousResults[k].history)||[]);runToken[k]=(runToken[k]||0)+1;state.resolving[k]=false;a[k]={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:c.duration,duration:c.duration,lockSeconds:c.lock,forcedWinner:null,startedAt:Date.now(),previousResults:history.slice(0,10)};save(a);try{fetch('/api/live-rounds/'+encodeURIComponent(k)+'/new',{method:'POST'}).catch(function(){})}catch(e){}reset(k,a[k]);render()}
-  function decide(k,opts,n){return smartDecision(k,opts,n)}
-  function resolveAB(){var k='andar-bahar',t=nextRun(k),roundId=cur(k).roundId,d=deck(),j=safeCard(d.pop()),a=[],b=[],first='Andar',win=null,revealed=0;var matchIndex=d.findIndex(function(c){return c&&c.v===j.v});var match=matchIndex>=0?d.splice(matchIndex,1)[0]:{v:j.v,s:j.s,suit:j.suit};var revealIndex=1+Math.floor(Math.random()*12);var insertAt=Math.max(0,d.length-revealIndex);d.splice(insertAt,0,match);state.resolving[k]=true;state.andarSpinning=true;state.abJoker=j;state.andarCards={andar:[],bahar:[]};render();function done(){if(!runAlive(k,t))return;var natural=win||(Math.random()<0.5?'Andar':'Bahar');settleFromServer(k,t,roundId,natural)}function rev(){if(!runAlive(k,t))return;if(win||revealed>=12||!d.length)return done();var c=safeCard(d.pop());revealed++;if(first==='Andar'&&a.length<6)a.push(c);else if(first==='Bahar'&&b.length<6)b.push(c);else{first=first==='Andar'?'Bahar':'Andar';return rev()}state.andarCards={andar:a.slice(),bahar:b.slice()};render();if(c.v===j.v)win=first;first=first==='Andar'?'Bahar':'Andar';if(!win)setTimeout(rev,GAP_AB);else setTimeout(done,RESULT_HOLD)}rev()}
+  function resolveAB(){var k='andar-bahar',t=nextRun(k),roundId=cur(k).roundId,d=deck(),j=state.abJoker||safeCard(d.pop()),a=[],b=[],first='Andar',win=null,revealed=0;if(!state.abJoker){state.abJoker=j}var matchIndex=d.findIndex(function(c){return c&&c.v===j.v});var match=matchIndex>=0?d.splice(matchIndex,1)[0]:{v:j.v,s:j.s,suit:j.suit};var revealIndex=1+Math.floor(Math.random()*12);var insertAt=Math.max(0,d.length-revealIndex);d.splice(insertAt,0,match);state.resolving[k]=true;state.andarSpinning=true;state.andarCards={andar:[],bahar:[]};render();function done(){if(!runAlive(k,t))return;var natural=win||(Math.random()<0.5?'Andar':'Bahar');settleFromServer(k,t,roundId,natural)}function rev(){if(!runAlive(k,t))return;if(win||revealed>=12||!d.length)return done();var c=safeCard(d.pop());revealed++;if(first==='Andar'&&a.length<6)a.push(c);else if(first==='Bahar'&&b.length<6)b.push(c);else{first=first==='Andar'?'Bahar':'Andar';return rev()}state.andarCards={andar:a.slice(),bahar:b.slice()};render();if(c.v===j.v)win=first;first=first==='Andar'?'Bahar':'Andar';if(!win)setTimeout(rev,GAP_AB);else setTimeout(done,RESULT_HOLD)}rev()}
   function resolveLucky(){var k='lucky7';if(active(k))return;var t=nextRun(k),roundId=cur(k).roundId;state.resolving[k]=true;state.l7Spin=true;state.l7Card=null;render();var c=safeCard(deck()[0]);setTimeout(function(){if(!runAlive(k,t))return;state.l7Card=c;state.l7Spin=false;render();var cr=rank(c),n=cr>7?'7 UP':cr<7?'7 DOWN':'7';setTimeout(function(){if(runAlive(k,t))settleFromServer(k,t,roundId,n)},RESULT_HOLD_L7)},L7_FLIP_DELAY)}
   function resolveTeen(){var k='teen-patti',t=nextRun(k),roundId=cur(k).roundId,d=deck(),p=[safeCard(d.pop()),safeCard(d.pop()),safeCard(d.pop())],q=[safeCard(d.pop()),safeCard(d.pop()),safeCard(d.pop())],i=0;state.resolving[k]=true;state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();function rev(){if(!runAlive(k,t))return;if(i<6){if(i%2===0)state.tpPlayer.push(p[Math.floor(i/2)]);else state.tpDealer.push(q[Math.floor(i/2)]);i++;render();setTimeout(rev,GAP_TEEN)}else{var ps=hand(p),ds=hand(q);setTimeout(function(){if(runAlive(k,t))settleFromServer(k,t,roundId,ps>ds?'Team A':ds>ps?'Team B':'Tie')},RESULT_HOLD_TEEN)}}rev()}
   function resolveDragon(){var k='dragon-tiger';if(active(k))return;var t=nextRun(k),roundId=cur(k).roundId,d=deck(),x=safeCard(d.pop()),y=safeCard(d.pop());state.resolving[k]=true;state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();setTimeout(function(){if(!runAlive(k,t))return;state.dtDragon=x;render();setTimeout(function(){if(!runAlive(k,t))return;state.dtTiger=y;state.dtSpin=false;render();var rx=rank(x),ry=rank(y),n=rx>ry?'Dragon':ry>rx?'Tiger':'Tie';setTimeout(function(){if(runAlive(k,t))settleFromServer(k,t,roundId,n)},RESULT_HOLD_DT)},GAP_DT)},500)}
@@ -195,5 +261,5 @@
   window.canPlaceBet=function(k){var r=cur(k),c=cfg(k);return r.phase==='betting'&&elapsed(r)<c.duration-c.lock&&!active(k)};
   window.__antproTimerTick=function(){if(!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if((r.phase==='locked'||r.phase==='revealing')&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'?RESULT_HOLD_DT:k==='teen-patti'?RESULT_HOLD_TEEN:k==='lucky7'?RESULT_HOLD_L7:RESULT_HOLD))newRound(k)});render()};
   setInterval(window.__antproTimerTick,500);setTimeout(window.__antproTimerTick,100);
-  console.log('[AntPro] AB no-Tie | DT Tie 11x | timings OK');
+  console.log('[AntPro] AB joker center | no-Tie | DT Tie 11x');
 })();
