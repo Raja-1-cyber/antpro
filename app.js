@@ -312,6 +312,7 @@ setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','te
 const state={
   view:'home',menu:false,loggedIn:!location.pathname.toLowerCase().includes('login') && !!restoredUser,
   loginRole:roleFromPath(),
+  loginDraft:{user:'',pass:'',otp:''},loginBusy:false,
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
@@ -738,13 +739,14 @@ function login(){
   const roleName=state.loginRole==='supermaster'?'SUPER MASTER':state.loginRole==='master'?'MASTER':state.loginRole==='agent'?'AGENT':'CLIENT';
   const title=staff?`${roleName} LOGIN`:'Please Login to Continue';
   const userLabel=staff?'User ID':'Username';
+  const draft=state.loginDraft||{user:'',pass:'',otp:''};
   return `<div class="login-screen">
     <div class="logo login-wordmark" aria-label="antpro"><span class="wordmark-ant">ant</span><span class="wordmark-pro">pro</span></div>
     ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
     <h2>${title}</h2>
-    <input id="loginUser" name="antpro-login-id" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${userLabel}" value="" onkeydown="return loginKeydown(event)">
-    <input id="loginPass" name="antpro-login-secret" autocomplete="new-password" type="password" placeholder="Password" onkeydown="return loginKeydown(event)">
-    ${staff?`<input id="loginOtp" name="antpro-login-otp" autocomplete="off" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" onkeydown="return loginKeydown(event)">`:''}
+    <input id="loginUser" name="antpro-login-id" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${userLabel}" value="${escapeHTML(draft.user)}" oninput="state.loginDraft.user=this.value" onkeydown="return loginKeydown(event)">
+    <input id="loginPass" name="antpro-login-secret" autocomplete="off" data-lpignore="true" data-1p-ignore="true" type="password" placeholder="Password" value="${escapeHTML(draft.pass)}" oninput="state.loginDraft.pass=this.value" onkeydown="return loginKeydown(event)">
+    ${staff?`<input id="loginOtp" name="antpro-login-otp" autocomplete="off" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" value="${escapeHTML(draft.otp)}" oninput="state.loginDraft.otp=this.value" onkeydown="return loginKeydown(event)">`:''}
     <button type="button" onclick="doLogin()">${staff?'Verify OTP':'Login'} ⇥</button>
     ${staff?`<div class="login-role-links"><a href="/login">Client</a><a href="/agent-login">Agent</a><a href="/master-login">Master</a><a href="/supermaster-login">Super Master</a></div>`:''}
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
@@ -766,16 +768,18 @@ async function doLogin(){
   const passEl=document.getElementById('loginPass');
   const username=(userEl&&userEl.value)||'';
   const password=(passEl&&passEl.value)||'';
+  state.loginDraft={user:username,pass:password,otp:(document.getElementById('loginOtp')||{}).value||''};
   const expected=state.loginRole||'player';
   await syncUsersFromServer();
   const acc=findAccount(username,password);
   if(!acc){state.loginBusy=false;toast('Invalid login — check ID and password');return;}
   if(acc.role!==expected){state.loginBusy=false;toast('Use the '+loginPath(acc.role)+' login page');return;}
-  if(expected!=='player' && ((document.getElementById('loginOtp')||{}).value||'').trim()!=='318520'){state.loginBusy=false;toast('Invalid demo OTP');return;}
+  if(expected!=='player' && state.loginDraft.otp.trim()!=='318520'){state.loginBusy=false;toast('Invalid demo OTP');return;}
   if(isBlocked(acc.id)){state.loginBusy=false;toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
   state.user=acc;
   state.loggedIn=true;
   state.loginBusy=false;
+  state.loginDraft={user:'',pass:'',otp:''};
   sessionStorage.setItem('antpro_user',JSON.stringify(acc));
   if(acc.role==='supermaster'){
     go('home');
