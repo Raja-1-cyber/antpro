@@ -1185,7 +1185,8 @@ function previousResultsHTML(){
   const remote=getLiveRounds()[key]?.previousResults||[];
   const local=state.previousResults?.[key]?.history||[];
   const history=(remote.length?remote:local).slice(0,10);
-  return `<div class="section-gold result-heading"><span>Previous Results</span><span>Last 10</span></div><div class="last-result previous-results">${(history.length?history:['—','—','—','—','—']).map(x=>`<div class="result-dot">${String(x)[0]}</div>`).join('')}</div>`;
+  const label=x=>{const v=String(x);if(key==='teen-patti')return v==='Team A'?'A':v==='Team B'?'B':'T';if(key==='lucky7')return v==='7 UP'?'UP':v==='7 DOWN'?'DOWN':'7';if(key==='dragon-tiger')return v==='Dragon'?'D':v==='Tiger'?'T':'Tie';return v==='Andar'?'A':v==='Bahar'?'B':v[0]||'—'};
+  return `<div class="section-gold result-heading"><span>Previous Results</span><span>Last 10</span></div><div class="last-result previous-results">${(history.length?history:['—','—','—','—','—']).map(x=>`<div class="result-dot">${label(x)}</div>`).join('')}</div>`;
 }
 function lucky7(){
   const live=getGamesLive()['lucky7'];
