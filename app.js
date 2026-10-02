@@ -145,6 +145,7 @@ function saveMarquee(){
   toast('Marquee text updated'); render();
 }
 async function syncMarquee(){
+  if(typeof state!=='undefined' && state.view!=='home')return;
   try{const r=await fetch('/api/marquee',{cache:'no-store'});const d=await r.json();if(d.text){localStorage.setItem(MARQUEE_KEY,d.text);if(state.view==='home')render()}}catch{}
 }
 
@@ -289,7 +290,7 @@ function tickRounds(){
     }
   }
 }
-setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
+setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
 
 
 
@@ -314,6 +315,7 @@ const state={
 
 let sharedSyncBusy=false;
 async function syncSharedRounds(){
+  if(!state.loggedIn||!['andar','lucky7','teenpatti','dragontiger'].includes(state.view))return;
   if(sharedSyncBusy)return;
   sharedSyncBusy=true;
   try{
