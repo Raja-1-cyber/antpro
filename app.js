@@ -275,10 +275,12 @@ function smartDecision(key,options,natural){
   }
   return natural||options[Math.floor(Math.random()*options.length)];
 }
-function stakeControl(key){return `<div class="stake-control"><label>STAKE (1 - 20,000 DEMO CHIPS)</label><input id="stake-${key}" type="number" min="1" max="20000" step="1" value="100" inputmode="numeric"></div>`}
+function stakeControl(key){const balance=getCoins();const defaultStake=Math.min(100,balance);return `<div class="stake-control"><label>BET AMOUNT<br><small>Balance: ${balance.toLocaleString()} chips</small></label><input id="stake-${key}" type="number" min="1" max="${Math.min(20000,balance)}" step="1" value="${defaultStake}" inputmode="numeric" aria-label="Bet amount"><div class="stake-chips" role="group" aria-label="Quick bet amount"><button type="button" onclick="setStake('${key}',50)">50</button><button type="button" onclick="setStake('${key}',100)">100</button><button type="button" onclick="setStake('${key}',500)">500</button></div></div>`}
+function setStake(key,value){const input=document.getElementById('stake-'+key);if(input)input.value=Math.min(Number(value)||1,Number(input.max)||getCoins());}
 function readStake(key){
   const n=Number((document.getElementById('stake-'+key)||{}).value||0);
-  if(!Number.isInteger(n)||n<1||n>20000){toast('Stake 1 se 20,000 demo chips ke beech rakho');return 0}
+  if(!Number.isInteger(n)||n<1||n>20000){toast('Bet amount 1 se 20,000 chips ke beech rakho');return 0}
+  if(n>getCoins()){toast('Bet amount aapke chips se zyada nahi ho sakta');return 0}
   return n;
 }
 function canPlaceBet(key){
@@ -670,6 +672,11 @@ function placeSessionBet(sessionName,side,line){
   pushSettledBet({type:'CRICKET SESSION',team:side,rate:1.9,amt:amount,profit:0,player:(state.user&&state.user.id)||'Player',status:'open',result:'PENDING'});toast(`${side} bet placed · ${amount} coins`);render();
 }
 
+function getExposure(){
+  const pending=Object.values(state.pendingBets||{}).flat().reduce((sum,b)=>sum+(Number(b.amt)||0),0);
+  const open=(state.activeBets||[]).filter(b=>b.status==='open').reduce((sum,b)=>sum+(Number(b.amt)||0),0);
+  return pending+open;
+}
 function header(){
   const u=state.user||{id:'C150642',name:'Rahl',role:'player'};
   const c=(u.role==='player'?getCoins():(u.chips||0)).toFixed(2);
@@ -679,7 +686,7 @@ function header(){
     <div class="user"><strong>${label}</strong></div>
     <button class="header-menu" onclick="state.menu=true;render()" aria-label="Open menu">☰</button>
   </div>
-  <div class="chips-bar">Chips: ${c} <span class="expo">Expo : 0.00</span></div>
+  <div class="chips-bar">Chips: ${c} <span class="expo">Expo : ${getExposure().toLocaleString('en-IN')}</span></div>
   ${state.view==='home'?`<div class="marquee-bar"><span>${escapeHTML(getMarquee())}&nbsp;&nbsp;&nbsp;${escapeHTML(getMarquee())}&nbsp;&nbsp;&nbsp;${escapeHTML(getMarquee())}</span></div>`:''}`;
 }
 function footer(){return `<nav class="bottomnav"><span>‹</span><span>›</span><span>⌂</span><span class="addr">antpro999.net</span><span>•••</span></nav>`}
@@ -1113,7 +1120,7 @@ function cardRank(c){
   return o[c.v]||0;
 }
 function cardHTML(c){
-  if(!c) return '<div class="p-card ghost">?</div>';
+  if(!c) return '<div class="p-card ghost" aria-label="Card back"><span>ANT<br>PRO</span></div>';
   return `<div class="p-card ${c.s||''}">${c.v}<br><small>${c.suit||''}</small></div>`;
 }
 

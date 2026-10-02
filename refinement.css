@@ -34,7 +34,8 @@
 .home-grid{grid-template-columns:1fr 1fr;gap:0 0;padding:4px 14px 30px;background:#eee}.home-tile{min-height:138px}.home-tile .icon-wrap{width:126px;height:126px;margin:0 auto 1px;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}.home-tile .icon-wrap img{width:100%;height:100%;object-fit:cover;border:0;outline:0;mix-blend-mode:multiply}.home-tile .icon-wrap .emoji-big{border:0;background:transparent;box-shadow:none}.home-tile label{font-size:11px;font-weight:400;color:#111;text-transform:none;letter-spacing:0}
 .content{padding-bottom:0}.bottomnav{display:none}
 .game-screen{min-height:calc(100vh - 86px);background:#000}.game-top{height:29px;padding:5px 8px;background:#8b6500;font-size:11px;color:#fff}.game-top .g-title{color:#fff;font-weight:700}.game-card-strip{min-height:72px;background:#000;border-top:1px solid #9a8700;border-bottom:0;padding:2px 3px;gap:4px}.game-card-strip-label{min-width:34px;color:#fff;font-size:10px}.game-card-strip-label .live-pill{display:none}.game-card-strip-cards .p-card{transform:scale(.72);transform-origin:left top;margin:-4px -4px -10px 0}.live-video-stage{min-height:330px!important}
-.game-screen .p-card:not(.ghost){transform-style:preserve-3d;backface-visibility:hidden;animation:antpro-card-flip .7s ease both;box-shadow:0 2px 8px #000b,0 0 0 1px #fff}
+.game-screen .p-card{flex:0 0 31px;min-width:31px;min-height:38px;transform:none!important;transition:none;box-shadow:0 2px 8px #000b,0 0 0 1px #fff}
+.game-screen .p-card:not(.ghost){transform-style:preserve-3d;backface-visibility:hidden}
 @keyframes antpro-card-flip{0%{opacity:.35;transform:perspective(260px) rotateY(90deg) scale(.92)}65%{opacity:1;transform:perspective(260px) rotateY(-10deg) scale(1.03)}100%{opacity:1;transform:perspective(260px) rotateY(0deg) scale(1)}}
 .game-screen + .back-btn,.game-screen~.back-btn{display:none}
 
@@ -49,7 +50,13 @@
 
 /* Final game-control parity with the supplied Andar Bahar frame. */
 .marquee-bar span{animation:marq 13s linear infinite;padding-left:100%}
-.game-screen .stake-control{display:none}
+.game-screen .stake-control{display:flex;min-height:48px;padding:6px 8px;background:#f5f5f5;color:#222;align-items:center;gap:7px}
+.game-screen .stake-control label{color:#333;font-size:10px;line-height:1.15;min-width:82px}
+.game-screen .stake-control label small{color:#777;font-size:9px;font-weight:500}
+.game-screen .stake-control input{width:92px;height:32px;border:1px solid #1683c7;border-radius:3px;background:#fff;color:#111;font-size:14px;padding:5px 7px}
+.stake-chips{display:flex;gap:3px;align-items:center}
+.stake-chips button{border:0;border-radius:3px;background:#1683c7;color:#fff;font-size:10px;font-weight:700;padding:7px 5px;min-width:30px;cursor:pointer}
+.stake-chips button:active{background:#0b5f98}
 .game-screen .bet-locks{background:#eee}
 .game-screen .bet-lock-row{min-height:43px;background:#aaa;border-bottom:1px solid #fff}
 .game-screen .bet-lock-row .side{color:#111;font-size:13px;padding:10px 12px}
