@@ -1,0 +1,62 @@
+/* Premium live-card treatment: blue backs and crisp casino card faces. */
+.game-live-cards .p-card,
+.game-card-strip-cards .p-card{
+  position:relative;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border-radius:6px;
+  border:1px solid rgba(255,255,255,.9);
+  background:linear-gradient(145deg,#fff 0%,#f6f8fc 62%,#dce4f2 100%);
+  color:#17233a;
+  font-family:Georgia,"Times New Roman",serif;
+  font-weight:900;
+  text-shadow:0 1px 0 #fff;
+  box-shadow:0 3px 8px rgba(0,0,0,.55), inset 0 0 0 1px rgba(22,61,119,.18);
+}
+.game-live-cards .p-card:not(.ghost)::after,
+.game-card-strip-cards .p-card:not(.ghost)::after{
+  content:"";
+  position:absolute;
+  inset:3px;
+  border:1px solid rgba(28,76,146,.18);
+  border-radius:4px;
+  pointer-events:none;
+}
+.game-live-cards .p-card.red,
+.game-card-strip-cards .p-card.red{color:#c51f35}
+.game-live-cards .p-card.ghost,
+.game-card-strip-cards .p-card.ghost{
+  background:
+    linear-gradient(135deg,rgba(255,255,255,.16) 25%,transparent 25%) 0 0/8px 8px,
+    linear-gradient(315deg,rgba(255,255,255,.12) 25%,transparent 25%) 0 0/8px 8px,
+    linear-gradient(145deg,#1676c8,#073777 78%);
+  color:#f8df72;
+  border:2px solid #d8b74b;
+  text-shadow:0 1px 2px #062454;
+  box-shadow:0 3px 9px rgba(0,0,0,.62),inset 0 0 0 2px rgba(255,255,255,.18);
+}
+.game-live-cards .p-card.ghost::before,
+.game-card-strip-cards .p-card.ghost::before{
+  content:"";
+  position:absolute;
+  inset:4px;
+  border:1px solid rgba(255,226,111,.75);
+  border-radius:3px;
+  pointer-events:none;
+}
+.game-live-cards .p-card.ghost span,
+.game-card-strip-cards .p-card.ghost span{
+  position:relative;
+  z-index:1;
+  font-family:Arial,sans-serif;
+  font-size:7px;
+  line-height:1.05;
+  letter-spacing:.5px;
+  text-align:center;
+}
+.game-live-cards .p-card small,
+.game-card-strip-cards .p-card small{position:relative;z-index:1;font-size:10px}
+@media(max-width:390px){
+  .game-live-cards .p-card{border-radius:5px;box-shadow:0 2px 7px rgba(0,0,0,.6)}
+}

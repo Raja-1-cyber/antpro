@@ -763,19 +763,23 @@ function loginKeydown(event){
   }
   return true;
 }
-function doLogin(){
+async function doLogin(){
+  if(state.loginBusy)return;
+  state.loginBusy=true;
   const userEl=document.getElementById('loginUser');
   const passEl=document.getElementById('loginPass');
   const username=(userEl&&userEl.value)||'';
   const password=(passEl&&passEl.value)||'';
   const expected=state.loginRole||'player';
+  await syncUsersFromServer();
   const acc=findAccount(username,password);
-  if(!acc){toast('Invalid login');return;}
-  if(acc.role!==expected){toast('Use the '+expected.toUpperCase()+' login page');return;}
-  if(expected!=='player' && ((document.getElementById('loginOtp')||{}).value||'').trim()!=='318520'){toast('Invalid demo OTP');return;}
-  if(isBlocked(acc.id)){toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
+  if(!acc){state.loginBusy=false;toast('Invalid login — check ID and password');return;}
+  if(acc.role!==expected){state.loginBusy=false;toast('Use the '+loginPath(acc.role)+' login page');return;}
+  if(expected!=='player' && ((document.getElementById('loginOtp')||{}).value||'').trim()!=='318520'){state.loginBusy=false;toast('Invalid demo OTP');return;}
+  if(isBlocked(acc.id)){state.loginBusy=false;toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
   state.user=acc;
   state.loggedIn=true;
+  state.loginBusy=false;
   sessionStorage.setItem('antpro_user',JSON.stringify(acc));
   if(acc.role==='supermaster'){
     go('home');
