@@ -131,39 +131,7 @@
   function safeFind(id) {
     try { return typeof findUserById === 'function' ? findUserById(id) : null; } catch (e) { return null; }
   }
-  window.applyCascade = function (bet) {
-    if (!bet || bet.rolled_back) return;
-    if (typeof creditChips !== 'function') return;
-    var playerId = bet.player || bet.playerId;
-    if (!playerId) return;
-    var pl = safeFind(playerId);
-    if (!pl || pl.role !== 'player') return;
-    var agent = pl.agentId ? safeFind(pl.agentId) : null;
-    var master = agent && agent.masterId ? safeFind(agent.masterId) : null;
-    var superId = (master && (master.superId || master.superMasterId)) || (agent && (agent.superId || agent.superMasterId)) || 'SUPER';
-    var superM = safeFind(superId);
-    var amt = Math.abs(Number(bet.amt) || 0);
-    var profit = Math.abs(Number(bet.profit) || 0);
-    var won = bet.status === 'won';
-    var lost = bet.status === 'lost';
-    if (!won && !lost) return;
-    var bookPnL = won ? -profit : amt;
-    var aPct = Math.min(100, Math.max(0, Number(agent && agent.share) || 0));
-    var mPct = Math.min(100, Math.max(0, Number(master && master.share) || 0));
-    if (mPct < aPct) mPct = aPct;
-    var agentCut = Math.floor(bookPnL * aPct / 100);
-    var masterCut = Math.floor(bookPnL * (mPct - aPct) / 100);
-    var superCut = bookPnL - agentCut - masterCut;
-    var tag = (bet.type || 'GAME') + ' ' + (bet.team || '') + ' ' + playerId;
-    if (agent && agentCut) creditChips(agent.id, agentCut, (won ? 'Share pay win ' : 'Share on loss ') + tag);
-    if (master && masterCut) creditChips(master.id, masterCut, (won ? 'Share pay win ' : 'Share on loss ') + tag);
-    if (superM && superCut) creditChips(superM.id, superCut, (won ? 'Share pay win ' : 'Share on loss ') + tag);
-    var cPct = Number(agent && agent.commission) || 0;
-    if (agent && cPct > 0 && amt > 0) {
-      var comm = Math.floor(amt * cPct / 100);
-      if (comm) creditChips(agent.id, comm, 'Commission ' + tag);
-    }
-  };
+  window.applyCascade = function () { /* automatic commission/share payouts disabled */ };
 
   window.pushSettledBet = function (partial) {
     var bet = {
