@@ -14,7 +14,7 @@ Console → Realtime Database → **Rules** tab → neeche poora paste → **Pub
     },
 
     "users": {
-      ".read": true,
+      ".read": false,
       ".write": false
     },
 
@@ -40,7 +40,7 @@ Console → Realtime Database → **Rules** tab → neeche poora paste → **Pub
 | Path | Read | Write |
 |------|------|-------|
 | `live_matches` | Public (site + app) | Sirf Admin SDK (scraper / server) |
-| `users` | Public (hierarchy load) | Sirf Admin SDK |
+| `users` | Sirf authenticated web server | Sirf Admin SDK |
 | `meta` | Public | Sirf Admin SDK |
 | baaki sab | Band | Band |
 

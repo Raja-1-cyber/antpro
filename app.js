@@ -72,7 +72,8 @@ function saveUsers(u){
   u=normalizeHierarchy(u);
   try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
   // permanent server + Firebase mirror (fire-and-forget)
-  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:u})}).catch(()=>{});
+  const token=sessionStorage.getItem('antpro_session_token')||'';
+  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify({users:u})}).catch(()=>{});
 }
 function hierarchyRoot(data=loadUsers()){return data.rootMaster||data.masters?.MASTER||{id:'MASTER',name:'Master',role:'master',chips:0,share:100,commission:0}}
 function hierarchySuperMasters(data=loadUsers()){
@@ -774,7 +775,7 @@ async function doLogin(){
   try{
     const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role:expected})});
     const result=await response.json();
-    if(response.ok)acc=result.user||null;else if(response.status===403)serverLoginError='Use the '+loginPath(result.role||'player')+' login page';
+    if(response.ok){acc=result.user||null;if(result.token)sessionStorage.setItem('antpro_session_token',result.token)}else if(response.status===403)serverLoginError='Use the '+loginPath(result.role||'player')+' login page';
   }catch{}
   if(!acc&&!serverLoginError){await syncUsersFromServer();acc=findAccount(username,password)}
   if(!acc){state.loginBusy=false;toast(serverLoginError||'Invalid login — check ID and password');return;}
@@ -1920,7 +1921,7 @@ function view(){
 }
 function render(){try{app.innerHTML=view()}catch(err){console.error('AntPro render recovery',err);app.innerHTML='<div style="min-height:100vh;background:#111;color:#ffe566;display:grid;place-items:center;padding:24px;text-align:center;font:700 14px Arial"><div>Live service reconnecting…<br><small style="display:block;margin-top:8px;color:#aaa;font-weight:400">Your demo round is safe. Please wait a moment.</small></div></div>'}}
 function go(v){
-  if(v==='login'){const role=state.user&&state.user.role||'player';state.loggedIn=false;state.menu=false;state.user=null;sessionStorage.removeItem('antpro_user');location.href=loginPath(role);return}
+  if(v==='login'){const role=state.user&&state.user.role||'player';state.loggedIn=false;state.menu=false;state.user=null;sessionStorage.removeItem('antpro_user');sessionStorage.removeItem('antpro_session_token');location.href=loginPath(role);return}
   const role=(state.user&&state.user.role)||'player';
   // Guards: player cannot open agent/hierarchy/admin
   if(v==='super' && role!=='supermaster'){toast('Only Super Master');return}
