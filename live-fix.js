@@ -1,4 +1,4 @@
-/* AntPro live-fix — NO UI redesign. Game logic only: no blink, auto decision, hierarchy */
+/* AntPro live-fix — NO UI redesign. Game logic only: no blink, auto decision, hierarchy + AB joker */
 (function () {
   'use strict';
 
@@ -57,7 +57,6 @@
     return true;
   };
 
-  /* Controller force if set, else natural card result, else random */
   window.smartDecision = function (key, options, natural) {
     var forced = null;
     try {
@@ -193,12 +192,94 @@
     return bet;
   };
 
+  window.gameTop = function (title, round, cards) {
+    var keyMap = { 'ANDAR BAHAR': 'andar-bahar', 'LUCKY 7': 'lucky7', 'TEEN PATTI': 'teen-patti', 'DRAGON TIGER': 'dragon-tiger' };
+    var key = keyMap[title];
+    var r = key && typeof ensureRound === 'function' ? ensureRound(key) : null;
+    var status = '';
+    if (r && typeof roundSeconds === 'function') {
+      status = r.phase === 'betting' ? ('BET ' + roundSeconds(key) + 's')
+        : r.phase === 'locked' ? ('LOCKED ' + roundSeconds(key) + 's')
+        : String(r.phase || 'LIVE').toUpperCase();
+    }
+    return '<div class="game-top">' +
+      '<span class="g-title">' + title + '</span>' +
+      '<span class="g-meta">' + (status ? status + ' \u00b7 ' : '') + 'Round : ' + (round || '\u2014') + '</span>' +
+      '</div>';
+  };
+
+  window.andar = function andar() {
+    var live = typeof getGamesLive === 'function' ? getGamesLive()['andar-bahar'] : true;
+    if (!live) {
+      return (typeof topBtn === 'function' ? topBtn() : '') +
+        '<div class="view-title">ANDAR BAHAR</div><div style="padding:40px;text-align:center;color:#666">Offline</div>' +
+        (typeof back === 'function' ? back() : '');
+    }
+    var rid = (typeof ensureRound === 'function' && ensureRound('andar-bahar').roundId) || '\u2014';
+    var j = state.abJoker;
+    var a = (state.andarCards && state.andarCards.andar) || [];
+    var b = (state.andarCards && state.andarCards.bahar) || [];
+    var ch = typeof cardHTML === 'function' ? cardHTML : function () { return ''; };
+    var jokerBlock =
+      '<div class="ab-joker-row">' +
+        '<div class="live-side-label">Joker</div>' +
+        '<div class="card-pair ab-joker-card">' + ch(j || null) + '</div>' +
+      '</div>';
+    var sides =
+      '<div class="ab-sides-row">' +
+        '<div class="ab-side">' +
+          '<div class="live-side-label">Andar</div>' +
+          '<div class="card-pair">' + (a.length ? a.map(ch).join('') : ch(null) + ch(null)) + '</div>' +
+        '</div>' +
+        '<div class="ab-side">' +
+          '<div class="live-side-label">Bahar</div>' +
+          '<div class="card-pair">' + (b.length ? b.map(ch).join('') : ch(null) + ch(null)) + '</div>' +
+        '</div>' +
+      '</div>';
+    var hist = (state.abHistory && state.abHistory.length ? state.abHistory : ['R','R','R','R','R','R','R','R','R','R']).slice(0, 10);
+    var bets = (state.activeBets || []).filter(function (x) { return x.type === 'AndarBahar'; }).slice(0, 5);
+    return '<div class="game-screen">' +
+      gameTop('ANDAR BAHAR', rid, '') +
+      '<div class="cards-zone live-video-stage">' +
+        '<div class="game-live-cards">' + jokerBlock + sides + '</div>' +
+        (typeof alwaysGameSpinner === 'function' ? alwaysGameSpinner() : '') +
+      '</div>' +
+      '<div class="bet-locks">' + (typeof stakeControl === 'function' ? stakeControl('andar-bahar') : '') +
+        '<div class="bet-lock-row"><div class="side">Andar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar(\'Andar\')">\ud83d\udd12</div></div>' +
+        '<div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar(\'Bahar\')">\ud83d\udd12</div></div>' +
+        '<div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go(\'casino\')">BACK</div></div>' +
+      '</div>' +
+      '<div class="completed-bets">Completed Casino Bets</div>' +
+      '<div class="section-gold result-heading"><span>Last Result</span><span>View All</span></div>' +
+      '<div class="last-result">' + hist.map(function (x) { return '<div class="result-dot">' + String(x)[0] + '</div>'; }).join('') + '</div>' +
+      '<div class="section-gold">My Bet</div>' +
+      '<table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead><tbody>' +
+      (bets.length ? bets.map(function (x) {
+        return '<tr><td>' + x.team + '</td><td>' + x.rate + '</td><td>' + x.amt + '</td><td>' + (x.result || x.profit) + '</td></tr>';
+      }).join('') : '<tr><td colspan="4" style="color:#555">\u2014</td></tr>') +
+      '</tbody></table></div>' + (typeof back === 'function' ? back() : '');
+  };
+
+  if (!document.getElementById('antpro-ab-joker')) {
+    var s = document.createElement('style');
+    s.id = 'antpro-ab-joker';
+    s.textContent = [
+      '.ab-joker-row{display:flex;flex-direction:column;align-items:center;margin-bottom:10px}',
+      '.ab-joker-row .live-side-label{color:#ffe566;font-weight:800;font-size:11px;margin-bottom:2px}',
+      '.ab-joker-card .p-card{box-shadow:0 0 0 2px #f0c040,0 2px 8px #000a}',
+      '.ab-sides-row{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;width:100%}',
+      '.ab-side{display:flex;flex-direction:column;align-items:center}',
+      '.game-top .g-meta{font-size:10px;color:#aaa}'
+    ].join('\n');
+    document.head.appendChild(s);
+  }
+
   setTimeout(function () {
     ['andar-bahar', 'lucky7', 'teen-patti', 'dragon-tiger'].forEach(function (k) {
       try { ensureBettingRound(k); } catch (e) {}
     });
-    console.log('[AntPro] logic fix only — no UI change, no blink, auto decision');
+    console.log('[AntPro] AB joker center + logic fix');
   }, 300);
 
-  console.log('[AntPro] live-fix minimal');
+  console.log('[AntPro] live-fix minimal + AB joker');
 })();
