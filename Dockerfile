@@ -1,18 +1,18 @@
-# Python base image specify karein
+# Python base image
 FROM python:3.10-slim
 
 # Working directory set karein
 WORKDIR /app
 
-# Dependencies copy karke install karein
-COPY requirements.txt .
+# Scraper folder se requirements copy karke install karein
+COPY scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Scraper code copy karein
-COPY . .
+# Poora scraper code copy karein
+COPY scraper/ .
 
-# Environment variables (Railway se pass hongi)
+# Output logging fix
 ENV PYTHONUNBUFFERED=1
 
-# Scraper run karne ki command
+# Scraper start command
 CMD ["python", "cricket_scraper.py"]
