@@ -74,6 +74,9 @@ function hashKey(value){let h=2166136261;for(const ch of value){h^=ch.charCodeAt
 function cricketSessions(matchName){
   const key=String(matchName||'').trim();
   const live=cricketCache.matches.find(m=>m.name===key);
+  const sessions=live?.sessions||{};
+  const entries=Object.entries(sessions);
+  if(entries.length)return entries.map(([name,s],id)=>({id,name:name.endsWith('_over')?`${name.split('_')[0]} OVER RUN ${(live.home||'TEAM').slice(0,8).toUpperCase()}`:name.replaceAll('_',' ').toUpperCase(),not:s?.no_run??s?.not??'—',yes:s?.yes_run??s?.yes??'—',rate:s?.rate??'—',status:s?.status||'SUSPENDED',source:'firebase-scraper',updated:cricketCache.updated}));
   return [{id:0,name:live?.live?'Provider session lines unavailable':'Sessions open when match goes LIVE',not:'—',yes:'—',rate:'—',status:'SUSPENDED',source:'provider-unavailable',updated:cricketCache.updated}];
 }
 function json(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(payload))}
@@ -84,7 +87,7 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/marquee'&&req.method==='GET')return json(res,200,{text:marquee});
   if(u.pathname==='/api/marquee'&&req.method==='POST'){const body=await readBody(req);const text=String(body.text||'').trim().slice(0,120);if(!text)return json(res,400,{ok:false,error:'text required'});marquee=text;persistMarquee();return json(res,200,{ok:true,text:marquee})}
   if(u.pathname==='/api/cricket/matches'&&req.method==='GET'){const feed=await fetchCricket();return json(res,feed.matches.length?200:502,{source:feed.source||'unknown',updated:feed.updated,matches:feed.matches,meta:feed.meta||null,error:feed.matches.length?null:'Live cricket feed unavailable'})}
-  if(u.pathname==='/api/cricket/sessions'&&req.method==='GET'){const feed=await fetchCricket();const matchName=u.searchParams.get('match')||'';if(!feed.matches.length)return json(res,502,{ok:false,error:'SportScore feed unavailable',sessions:[]});const match=feed.matches.find(m=>m.name===matchName);if(!match)return json(res,404,{ok:false,error:'Match not found',sessions:[]});return json(res,200,{ok:true,source:'sportscore',match:match.name,matchStatus:match.status,matchLive:match.live,updated:feed.updated,sessions:cricketSessions(match.name)})}
+  if(u.pathname==='/api/cricket/sessions'&&req.method==='GET'){const feed=await fetchCricket();const matchName=u.searchParams.get('match')||'';if(!feed.matches.length)return json(res,502,{ok:false,error:'SportScore feed unavailable',sessions:[]});const match=feed.matches.find(m=>m.name===matchName);if(!match)return json(res,404,{ok:false,error:'Match not found',sessions:[]});return json(res,200,{ok:true,source:feed.source||'unknown',match:match.name,matchStatus:match.status,matchLive:match.live,updated:feed.updated,sessions:cricketSessions(match.name)})}
   if(u.pathname==='/api/live-rounds'&&req.method==='GET')return json(res,200,snapshot());
   const force=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/force$/);
   if(force&&req.method==='POST'){const key=decodeURIComponent(force[1]);const body=await readBody(req);const r=currentRound(key);if(!GAME_DEFS[key]||typeof body.side!=='string')return json(res,400,{ok:false,error:'invalid game or side'});r.forcedWinner=body.side;rounds[key]=r;persist();return json(res,200,{ok:true,round:r})}
