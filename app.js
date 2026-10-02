@@ -1775,10 +1775,15 @@ function adminDecisionCards(){
     const totals=g.sides.reduce((out,s)=>(out[s]=gameBets.filter(b=>(b.side||b.team)===s).reduce((n,b)=>n+(Number(b.amt)||0),0),out),{});
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
     const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
-    const left=Math.max(0,(r.duration||GAME_TIMINGS[g.key]?.duration||30)-elapsed);
-    const revealElapsed=Math.max(0,elapsed-(r.duration||GAME_TIMINGS[g.key]?.duration||30));
+    const duration=Number(r.duration)||GAME_TIMINGS[g.key]?.duration||30;
+    const lock=Number.isFinite(Number(r.lockSeconds))?Number(r.lockSeconds):(GAME_TIMINGS[g.key]?.lock||0);
+    const left=Math.max(0,duration-elapsed);
+    const revealElapsed=Math.max(0,elapsed-duration);
     const resultElapsed=r.resultAt?Math.max(0,Math.floor((Date.now()-Number(r.resultAt))/1000)):0;
-    const status=r.phase==='betting'?`BETTING · ${left}s`:r.phase==='locked'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`DECISION · ${escapeHTML(r.result||'—')}`:String(r.phase||'LIVE').toUpperCase();
+    const betLeft=Math.max(0,left-lock);
+    const status=r.phase==='betting'?`BETTING · ${betLeft}s`:r.phase==='locked'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`DECISION · ${escapeHTML(r.result||'—')}`:String(r.phase||'LIVE').toUpperCase();
+    const previous=Array.isArray(r.previousResults)&&r.previousResults.length?r.previousResults[0]:'—';
+    const totalCoins=Object.values(totals).reduce((n,v)=>n+v,0);
     return `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="color:#f0c040">${g.name}</strong>
@@ -1789,7 +1794,7 @@ function adminDecisionCards(){
         ${r.phase==='result'?`<span class="controller-result">Result hold ${Math.max(0,7-resultElapsed)}s · next timer starts with new round</span>`:''}
         ${r.forcedWinner?`<span class="controller-force">FORCE QUEUED: ${escapeHTML(r.forcedWinner)}</span>`:''}
       </div>
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · ${gameBets.reduce((n,b)=>n+(Number(b.amt)||0),0)} coins</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · ${totalCoins} coins · BET CLOSES IN ${r.phase==='betting'?betLeft:0}s</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
@@ -1800,7 +1805,8 @@ function adminDecisionCards(){
           </div>`;
         }).join('')}
       </div>
-      <div class="controller-bet-list">${gameBets.length?gameBets.slice(-8).reverse().map(b=>`<div><b>${escapeHTML(b.player)}</b><span>${escapeHTML(b.side||b.team)} · ${Number(b.amt)||0}</span></div>`).join(''):'<em>No bets in this round</em>'}</div>
+      <div style="display:flex;justify-content:space-between;gap:6px;margin:4px 0 8px;font-size:10px;color:#8b949e"><span>DECISION: <b style="color:#7dd3fc">${escapeHTML(r.result||'PENDING')}</b></span><span>PREVIOUS: <b style="color:#fde68a">${escapeHTML(previous)}</b></span></div>
+      <div class="controller-bet-list">${gameBets.length?gameBets.slice(-8).reverse().map(b=>`<div><b>${escapeHTML(b.player||'Player')}</b><span>${escapeHTML(b.side||b.team)} · ${Number(b.amt)||0}</span></div>`).join(''):'<em>No bets in this round — totals reset automatically on next round</em>'}</div>
       <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Force result (next / current reveal)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
         ${g.sides.map(s=>`<button onclick="forceWinner('${g.key}','${s}')" style="flex:1;min-width:60px;padding:8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:11px;cursor:pointer">${s}</button>`).join('')}
@@ -1952,4 +1958,4 @@ function closeMenu(e){if(e.target.classList.contains('drawer')){state.menu=false
 render();
 syncMarquee();
 setInterval(syncMarquee,15000);
-setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},2000);
+setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},1000);
