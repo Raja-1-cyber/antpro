@@ -54,10 +54,10 @@ function loadUsers(){
 function normalizeHierarchy(data){
   data=data||{};data.superMasters=data.superMasters||{};data.masters=data.masters||{};data.agents=data.agents||{};data.players=data.players||{};
   if(!data.masters.MASTER)data.masters.MASTER={id:'MASTER',name:'Root Master',role:'master',pass:'master123',chips:0,agents:[],status:'active'};
-  Object.values(data.masters).forEach(m=>{m.agents=[];m.status=m.status||'active'});
-  Object.values(data.superMasters).forEach(sm=>{sm.agents=[];sm.status=sm.status||'active';const parent=data.masters[sm.parentMasterId||'MASTER'];if(parent){parent.superMasters=parent.superMasters||[];if(!parent.superMasters.includes(sm.id))parent.superMasters.push(sm.id)}});
-  Object.values(data.agents).forEach(a=>{a.players=[];a.status=a.status||'active';const parent=data.masters[a.masterId||'MASTER'];if(parent&&!parent.agents.includes(a.id))parent.agents.push(a.id);const sm=data.superMasters[a.superId];if(sm&&!sm.agents.includes(a.id))sm.agents.push(a.id)});
-  Object.values(data.players).forEach(p=>{p.status=p.status||'active';const agent=data.agents[p.agentId];if(agent&&!agent.players.includes(p.id))agent.players.push(p.id)});
+  Object.values(data.masters).forEach(m=>{m.agents=[];m.superMasters=m.superMasters||[];m.status=m.status||'active';m.share=typeof m.share==='number'?m.share:100});
+  Object.values(data.superMasters).forEach(sm=>{sm.agents=[];sm.status=sm.status||'active';sm.share=typeof sm.share==='number'?sm.share:0;const parent=data.masters[sm.parentMasterId||'MASTER'];if(parent){parent.superMasters=parent.superMasters||[];if(!parent.superMasters.includes(sm.id))parent.superMasters.push(sm.id)}});
+  Object.values(data.agents).forEach(a=>{a.players=[];a.status=a.status||'active';a.share=typeof a.share==='number'?a.share:0;const parent=data.masters[a.masterId||'MASTER'];if(parent&&!parent.agents.includes(a.id))parent.agents.push(a.id);const sm=data.superMasters[a.superId];if(sm&&!sm.agents.includes(a.id))sm.agents.push(a.id)});
+  Object.values(data.players).forEach(p=>{p.status=p.status||'active';p.share=typeof p.share==='number'?p.share:0;const agent=data.agents[p.agentId];if(agent&&!agent.players.includes(p.id))agent.players.push(p.id)});
   return data;
 }
 function mergeUserStores(local,remote){
@@ -1385,6 +1385,7 @@ function superPanel(){
     <label>Name</label><input id="newAgentName" placeholder="Agent name">
     <label>Password</label><input id="newAgentPass" placeholder="Create a password">
     <label>Opening Chips</label><input id="newAgentChips" type="number" value="10000">
+    <label>Agent Share %</label><input id="newAgentShare" type="number" min="0" max="100" value="0">
     <button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button>
   </div>
   <div style="padding:8px;display:flex;flex-wrap:wrap;gap:6px">
@@ -1414,25 +1415,25 @@ function superCreateMaster(){
 
 function hierarchy(){
   const data=loadUsers();const role=state.user&&state.user.role;const root=hierarchyRoot(data);const supers=hierarchySuperMasters(data);const agents=role==='supermaster'?hierarchyAgents(data,state.user.id):Object.values(data.agents||{});
-  const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><button class="hierarchy-link" onclick="state.selectedSuper='${sm.id}';state.hierarchyLayer='agent';go('hierarchy-details')">${sm.id}</button><small>${sm.name||''} · Super Master</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id}</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><button class="hierarchy-link" onclick="state.selectedAgent='${a.id}';go('clientdetails')">${a.id}</button><small>${a.name||''} · ${(a.players||[]).length} clients</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'}</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
-  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" placeholder="Create a password"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
+  const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><button class="hierarchy-link" onclick="state.selectedSuper='${sm.id}';state.hierarchyLayer='agent';go('hierarchy-details')">${sm.id}</button><small>${sm.name||''} · Super Master · Share ${sm.share||0}%</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id}</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><button class="hierarchy-link" onclick="state.selectedAgent='${a.id}';go('clientdetails')">${a.id}</button><small>${a.name||''} · ${(a.players||[]).length} clients · Share ${a.share||0}%</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'}</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
+  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" placeholder="Create a password"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><label>Super Master Share %</label><input id="newSuperShare" type="number" min="0" max="100" value="0"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><label>Agent Share %</label><input id="newAgentShare" type="number" min="0" max="100" value="0"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
 }
 function masterCreateSuperMaster(){
   if(!state.user||state.user.role!=='master'){toast('Only Root Master');return}
-  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
+  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newSuperShare')||{}).value,10)||0));
   if(!id||!pass){toast('Super ID + Password required');return}
   const data=loadUsers();if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
-  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,parentMasterId:state.user.id,status:'active',agents:[]};
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,share,parentMasterId:state.user.id,status:'active',agents:[]};
   data.masters[state.user.id].superMasters=data.masters[state.user.id].superMasters||[];data.masters[state.user.id].superMasters.push(id);
   saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
 }
 function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
-  const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
+  const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newAgentShare')||{}).value,10)||0));
   if(!id||!pass){toast('Agent ID + Password required');return}
   const data=loadUsers();if(data.agents[id]){toast('Agent ID exists');return}
   const masterId=state.user.parentMasterId||'MASTER';
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,masterId,superId:state.user.id,players:[],status:'active'};
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,share,masterId,superId:state.user.id,players:[],status:'active'};
   data.superMasters[state.user.id].agents=data.superMasters[state.user.id].agents||[];data.superMasters[state.user.id].agents.push(id);
   data.masters[masterId].agents=data.masters[masterId].agents||[];data.masters[masterId].agents.push(id);
   saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created and saved in hierarchy');render();
@@ -1442,11 +1443,11 @@ function masterCreateAgent(){
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();
   const name=((document.getElementById('newAgentName')||{}).value||'').trim();
   const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();
-  const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
+  const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newAgentShare')||{}).value,10)||0));
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(data.agents[id]){toast('Agent ID exists');return;}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,masterId:(state.user&&state.user.id)||'MASTER',players:[],status:'active'};
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,share,masterId:(state.user&&state.user.id)||'MASTER',players:[],status:'active'};
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
   audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'}`);
@@ -1491,7 +1492,7 @@ function exposureModal(id){
 }
 function staffActionMenu(id){
   const u=findUserById(id)||{id};
-  const actions=[['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
+  const actions=[['Set Share','share'],['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
   return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal action-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>${u.id} ACTIONS</h3><div class="modal-subtitle">All actions affect demo coins/local state only.</div>${actions.map(([label,key])=>`<button class="modal-action" onclick="boAction('${id}','${key}')">${label}<span>›</span></button>`).join('')}<button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
 }
 function hierarchyPicker(){
@@ -1589,7 +1590,10 @@ function staffHome(){
 }
 function boAction(id,action){
   const u=findUserById(id);if(!u){toast('User not found');return}
-  if(action==='deposit'||action==='withdraw'){
+  if(action==='share'){
+    const n=parseInt(prompt('Share % for '+id, String(u.share||0)),10);if(Number.isNaN(n)||n<0||n>100){toast('Share 0 se 100 ke beech hona chahiye');return;}
+    updateUserFields(id,{share:n});audit('SET SHARE',id,`${n}%`);toast('Share updated · '+id);return;
+  }else if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
     const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});audit(action.toUpperCase(),id,`${n} demo chips`);toast(action+' '+n+' chips · '+id);
   }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
@@ -1602,17 +1606,17 @@ function boAction(id,action){
   else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
   render();
 }
-function createClientForm(){return `<div class="create-client-card"><div class="section-bar">CREATE NEW CLIENT</div><div class="create-client-grid"><label>Client ID<input id="newClientId" placeholder="C3001"></label><label>Client Name<input id="newClientName" placeholder="Client name"></label><label>Password<input id="newClientPass" placeholder="Create a password"></label><label>Opening Chips<input id="newClientChips" type="number" value="1000"></label>${state.user&&state.user.role!=='agent'?'<label>Agent ID<input id="newClientAgent" placeholder="Agent ID"></label>':''}</div><div class="create-client-actions"><button class="blue-btn" onclick="agentCreateClient()">CREATE CLIENT</button><button class="back-btn" style="margin:0;width:auto" onclick="state.createClient=false;render()">CANCEL</button></div></div>`}
+function createClientForm(){return `<div class="create-client-card"><div class="section-bar">CREATE NEW CLIENT</div><div class="create-client-grid"><label>Client ID<input id="newClientId" placeholder="C3001"></label><label>Client Name<input id="newClientName" placeholder="Client name"></label><label>Password<input id="newClientPass" placeholder="Create a password"></label><label>Opening Chips<input id="newClientChips" type="number" value="1000"></label><label>Client Share %<input id="newClientShare" type="number" min="0" max="100" value="0"></label>${state.user&&state.user.role!=='agent'?'<label>Agent ID<input id="newClientAgent" placeholder="Agent ID"></label>':''}</div><div class="create-client-actions"><button class="blue-btn" onclick="agentCreateClient()">CREATE CLIENT</button><button class="back-btn" style="margin:0;width:auto" onclick="state.createClient=false;render()">CANCEL</button></div></div>`}
 function agentCreateClient(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role)){toast('Not allowed');return}
-  const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
+  const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newClientShare')||{}).value,10)||0));const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
   const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}
   if(!data.agents[aid]&&role==='agent'&&String(state.user.id).toUpperCase()===aid){data.agents[aid]={...state.user,id:aid,role:'agent',players:[],status:'active'};}
   if(!data.agents[aid]){toast('Agent not found — refresh hierarchy once');return}
   if(role==='agent'&&aid!==state.user.id){toast('Sirf apne clients bana sakte ho');return}
   if(role==='supermaster'&&!hierarchyAgents(data,state.user.id).some(a=>a.id===aid)){toast('Ye Agent aapke under nahi hai');return}
-  data.players[id]={id,name,role:'player',pass,chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};
+  data.players[id]={id,name,role:'player',pass,chips,share,agentId:aid,status:'active',createdAt:new Date().toISOString()};
   data.agents[aid].players=data.agents[aid].players||[];if(!data.agents[aid].players.includes(id))data.agents[aid].players.push(id);
   saveUsers(data);state.createClient=false;toast('Client '+id+' created and saved under Agent '+aid);render();
 }

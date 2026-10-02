@@ -9,7 +9,8 @@
       "pass": "master123",
       "chips": 0,
       "agents": [],
-      "status": "active"
+      "status": "active",
+      "share": 100
     }
   },
   "agents": {},
