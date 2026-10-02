@@ -770,9 +770,14 @@ async function doLogin(){
   const password=(passEl&&passEl.value)||'';
   state.loginDraft={user:username,pass:password,otp:(document.getElementById('loginOtp')||{}).value||''};
   const expected=state.loginRole||'player';
-  await syncUsersFromServer();
-  const acc=findAccount(username,password);
-  if(!acc){state.loginBusy=false;toast('Invalid login — check ID and password');return;}
+  let acc=null,serverLoginError='';
+  try{
+    const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role:expected})});
+    const result=await response.json();
+    if(response.ok)acc=result.user||null;else if(response.status===403)serverLoginError='Use the '+loginPath(result.role||'player')+' login page';
+  }catch{}
+  if(!acc&&!serverLoginError){await syncUsersFromServer();acc=findAccount(username,password)}
+  if(!acc){state.loginBusy=false;toast(serverLoginError||'Invalid login — check ID and password');return;}
   if(acc.role!==expected){state.loginBusy=false;toast('Use the '+loginPath(acc.role)+' login page');return;}
   if(expected!=='player' && state.loginDraft.otp.trim()!=='318520'){state.loginBusy=false;toast('Invalid demo OTP');return;}
   if(isBlocked(acc.id)){state.loginBusy=false;toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
