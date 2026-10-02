@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const dataDir=path.join(root,'data');
 const roundsFile=path.join(dataDir,'live-rounds.json');
+const liveBetsFile=path.join(dataDir,'live-bets.json');
 const marqueeFile=path.join(dataDir,'marquee.json');
 const usersFile=path.join(dataDir,'users.json');
 const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -35,9 +36,11 @@ const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=u
 const GAME_DEFS={'andar-bahar':{duration:20,lockSeconds:5},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:5},'dragon-tiger':{duration:15,lockSeconds:4}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
+let liveBets=[];try{liveBets=JSON.parse(fs.readFileSync(liveBetsFile,'utf8'))||[]}catch{liveBets=[]}
 let marquee='🌹 JAI SHREE SHYAM 🌹';try{marquee=JSON.parse(fs.readFileSync(marqueeFile,'utf8')).text||marquee}catch{}
 let cricketCache={matches:[],updated:0,error:null};
 function persist(){const tmp=roundsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rounds,null,2));fs.renameSync(tmp,roundsFile)}
+function persistLiveBets(){const tmp=liveBetsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(liveBets.slice(-2000),null,2));fs.renameSync(tmp,liveBetsFile)}
 function persistMarquee(){const tmp=marqueeFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify({text:marquee},null,2));fs.renameSync(tmp,marqueeFile)}
 function defaultUsers(){return {superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Root Master',role:'master',pass:'master123',chips:0,agents:[],status:'active'}},agents:{},players:{}};}
 function loadUsersFile(){try{const u=JSON.parse(fs.readFileSync(usersFile,'utf8'));if(u&&u.masters?.MASTER)return u}catch{}const d=defaultUsers();try{fs.writeFileSync(usersFile,JSON.stringify(d,null,2))}catch{}return d}
@@ -117,6 +120,8 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/cricket/matches'&&req.method==='GET'){const feed=await fetchCricket();return json(res,feed.matches.length?200:502,{source:feed.source||'unknown',updated:feed.updated,matches:feed.matches,meta:feed.meta||null,error:feed.matches.length?null:'Live cricket feed unavailable'})}
   if(u.pathname==='/api/cricket/sessions'&&req.method==='GET'){const feed=await fetchCricket();const matchName=u.searchParams.get('match')||'';if(!feed.matches.length)return json(res,502,{ok:false,error:'SportScore feed unavailable',sessions:[]});const match=feed.matches.find(m=>m.name===matchName);if(!match)return json(res,404,{ok:false,error:'Match not found',sessions:[]});return json(res,200,{ok:true,source:feed.source||'unknown',match:match.name,matchStatus:match.status,matchLive:match.live,updated:feed.updated,sessions:cricketSessions(match.name)})}
   if(u.pathname==='/api/live-rounds'&&req.method==='GET')return json(res,200,snapshot());
+  if(u.pathname==='/api/live-bets'&&req.method==='GET'){const requested=u.searchParams.get('gameKey');const roundsNow=snapshot();const bets=liveBets.filter(b=>(!requested||b.gameKey===requested)&&roundsNow[b.gameKey]?.roundId===b.roundId);return json(res,200,{ok:true,bets})}
+  if(u.pathname==='/api/live-bets'&&req.method==='POST'){if(!verifySessionToken(req))return json(res,401,{ok:false,error:'login required'});const body=await readBody(req);const gameKey=String(body.gameKey||'');const round=currentRound(gameKey);const amt=Number(body.amt);if(!GAME_DEFS[gameKey]||!body.player||!body.side||!Number.isFinite(amt)||amt<100)return json(res,400,{ok:false,error:'invalid live bet'});liveBets.push({gameKey,roundId:round.roundId,player:String(body.player).slice(0,64),side:String(body.side).slice(0,32),type:String(body.type||gameKey).slice(0,32),rate:Number(body.rate)||0,amt:Math.floor(amt),ts:Date.now()});persistLiveBets();return json(res,201,{ok:true})}
   const result=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/result$/);
   if(result&&req.method==='POST'){const key=decodeURIComponent(result[1]);const body=await readBody(req);const winner=String(body.winner||'').trim();if(!GAME_DEFS[key]||!winner)return json(res,400,{ok:false,error:'invalid result'});const r=currentRound(key);if(r.phase==='result')return json(res,200,{ok:true,round:r});const history=Array.isArray(r.previousResults)?r.previousResults:[];r.phase='result';r.timer=0;r.result=winner;r.resultAt=Date.now();r.previousResults=[winner,...history].slice(0,10);rounds[key]=r;persist();return json(res,200,{ok:true,round:r})}
   const force=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/force$/);

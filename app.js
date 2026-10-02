@@ -316,7 +316,7 @@ const state={
   loginDraft:{user:'',pass:'',otp:''},loginBusy:false,
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
-  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
+  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),controllerBets:[],controllerBetsBusy:false,
   welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
@@ -331,6 +331,12 @@ const state={
 };
 
 let sharedSyncBusy=false;
+async function syncControllerBets(){
+  if(state.view!=='admin'||!state.adminAuthed||state.controllerBetsBusy)return;
+  state.controllerBetsBusy=true;
+  try{const r=await fetch('/api/live-bets',{cache:'no-store'});if(r.ok){const d=await r.json();state.controllerBets=Array.isArray(d.bets)?d.bets:[];if(state.view==='admin')render()}}catch{}
+  finally{state.controllerBetsBusy=false}
+}
 async function syncSharedRounds(){
   if(!state.loggedIn||!['andar','lucky7','teenpatti','dragontiger'].includes(state.view))return;
   if(sharedSyncBusy)return;
@@ -1746,14 +1752,14 @@ function agentAddChips(pid){
 
 
 function adminBetsFeed(){
-  const bets=state.activeBets.slice(0,30);
+  const bets=(state.view==='admin'?state.controllerBets:state.activeBets).slice(0,30);
   if(!bets.length)return '<p style="color:#8b949e;font-size:11px">Abhi koi bet nahi · players bet lagayenge to yahan live dikhega.</p>';
   return bets.map(b=>{
     const t=new Date(b.ts||Date.now()).toLocaleTimeString();
     const pl=b.player||'Player';
     const st=b.status||'pending';
     const col=st==='won'?'#3fb950':st==='lost'?'#f85149':'#8b949e';
-    return `<div class="bet-row-admin"><span><b>${pl}</b> → ${b.team} <small>(${b.type})</small> @ ${b.rate}</span><span style="color:${col}">${b.amt} · ${st} · ${t}</span></div>`;
+    return `<div class="bet-row-admin"><span><b>${escapeHTML(pl)}</b> → ${escapeHTML(b.side||b.team||'—')} <small>(${escapeHTML(b.type||'—')})</small> @ ${b.rate}</span><span style="color:${col}">${Number(b.amt)||0} · ${st} · ${t}</span></div>`;
   }).join('');
 }
 function adminDecisionCards(){
@@ -1765,7 +1771,8 @@ function adminDecisionCards(){
   ];
   return defs.map(g=>{
     const r=ensureRound(g.key);
-    const totals=sideTotalsFor(g.type,g.sides);
+    const gameBets=(state.controllerBets||[]).filter(b=>b.gameKey===g.key&&b.roundId===r.roundId);
+    const totals=g.sides.reduce((out,s)=>(out[s]=gameBets.filter(b=>(b.side||b.team)===s).reduce((n,b)=>n+(Number(b.amt)||0),0),out),{});
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
     const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
     const left=roundSeconds(g.key);
@@ -1779,7 +1786,7 @@ function adminDecisionCards(){
         <span style="background:#21262d;padding:4px 8px;border-radius:4px">⏱ <b>${left}s</b></span>
         ${r.forcedWinner?`<span style="background:#3d2a00;color:#f0c040;padding:4px 8px;border-radius:4px">FORCE: ${r.forcedWinner}</span>`:''}
       </div>
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Side totals (kam coins wali soft highlight)</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · ${gameBets.reduce((n,b)=>n+(Number(b.amt)||0),0)} coins</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
@@ -1790,6 +1797,7 @@ function adminDecisionCards(){
           </div>`;
         }).join('')}
       </div>
+      <div class="controller-bet-list">${gameBets.length?gameBets.slice(-8).reverse().map(b=>`<div><b>${escapeHTML(b.player)}</b><span>${escapeHTML(b.side||b.team)} · ${Number(b.amt)||0}</span></div>`).join(''):'<em>No bets in this round</em>'}</div>
       <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Force result (next / current reveal)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
         ${g.sides.map(s=>`<button onclick="forceWinner('${g.key}','${s}')" style="flex:1;min-width:60px;padding:8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:11px;cursor:pointer">${s}</button>`).join('')}
@@ -1810,6 +1818,7 @@ function admin(){
       <p style="color:#8b949e;font-size:10px;margin-top:12px">Authorized only</p>
     </div></div>`;
   }
+  syncControllerBets();
   const live=getGamesLive();
   const games=[{key:'andar-bahar',name:'Andar Bahar',perm:true},{key:'lucky7',name:'Lucky 7',perm:true},{key:'teen-patti',name:'Teen Patti',perm:true},{key:'dragon-tiger',name:'Dragon Tiger',perm:true},{key:'virtual',name:'Virtual Games',perm:false}];
   return `<div class="admin-panel">
@@ -1940,3 +1949,4 @@ function closeMenu(e){if(e.target.classList.contains('drawer')){state.menu=false
 render();
 syncMarquee();
 setInterval(syncMarquee,15000);
+setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},2000);

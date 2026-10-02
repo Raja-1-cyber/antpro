@@ -1,0 +1,9 @@
+/* Modern controller cards and current-round bet feed. */
+.admin-panel{max-width:520px!important;background:linear-gradient(180deg,#0b1220,#111827)!important}
+.admin-section{border-color:#26364d!important;box-shadow:0 8px 24px #0003}
+.admin-section h4{letter-spacing:.3px}
+.controller-bet-list{display:grid;gap:4px;margin:0 0 10px;max-height:130px;overflow:auto;padding:6px;background:#0a0f18;border:1px solid #26364d;border-radius:6px;font-size:10px}
+.controller-bet-list div{display:flex;justify-content:space-between;gap:8px;padding:5px 6px;background:#111b2b;border-radius:4px;color:#d8e2f0}
+.controller-bet-list span{color:#7dd3fc;font-weight:700}
+.controller-bet-list em{color:#728096;font-style:normal;padding:5px}
+@media(max-width:390px){.admin-panel{padding:9px!important}.controller-bet-list{max-height:110px}}
