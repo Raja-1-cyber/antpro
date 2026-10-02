@@ -212,7 +212,6 @@ function forceWinner(gameKey, side){
   const all=getLiveRounds();
   const r=all[gameKey]||ensureRound(gameKey);
   r.forcedWinner=side;
-  if(r.phase!=='betting') r.phase='forced';
   all[gameKey]=r;
   setLiveRounds(all);
   fetch('/api/live-rounds/'+encodeURIComponent(gameKey)+'/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side})}).catch(()=>{});
@@ -226,6 +225,7 @@ function startNewRound(gameKey, secs){
     phase:'betting',
     timer:Math.max(5,parseInt(secs,10)||30),
     duration:Math.max(5,parseInt(secs,10)||30),
+    lockSeconds:GAME_TIMINGS[gameKey]?.lock??4,
     forcedWinner:null,
     startedAt:Date.now()
   };
@@ -1967,4 +1967,4 @@ function closeMenu(e){if(e.target.classList.contains('drawer')){state.menu=false
 render();
 syncMarquee();
 setInterval(syncMarquee,15000);
-setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},1000);
+setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},500);
