@@ -747,8 +747,8 @@ function shell(body){
 }
 function topBtn(){return `<button class="menu-btn" onclick="state.menu=true;render()">☰ MAIN MENU</button>`}
 function back(){return `<button class="back-btn" onclick="go('home')">BACK TO MAIN MENU</button>`}
-function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?'BET '+roundSeconds(key)+'s':(r&&r.phase==='locked'?'LOCKED '+roundSeconds(key)+'s':(r?(r.phase||'LIVE').toUpperCase():'LIVE'));return `<div class="game-top"><span class="g-title">${title}</span><span>Round ID : ${round}</span></div>`}
-function alwaysGameSpinner(){return `<div class="always-spinner" aria-label="Live game loading"><div class="spinner"></div></div>`}
+function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?((state.sharedRounds&&state.sharedRounds[key])||ensureRound(key)):null;const clock=r&&Number.isFinite(Number(r.timer))?Math.max(0,Number(r.timer)):key?roundSeconds(key):0;const betClock=r&&Number.isFinite(Number(r.betTimer))?Math.max(0,Number(r.betTimer)):clock;const elapsed=r&&Number.isFinite(Number(r.elapsedSeconds))?Number(r.elapsedSeconds):0;const duration=r&&Number(r.duration)||0;const status=r&&r.phase==='betting'?`BET ${clock}s · LOCK IN ${betClock}s`:r&&r.phase==='locked'?`LOCKED · REVEAL IN ${Math.max(0,duration-elapsed)}s`:r&&r.phase==='revealing'?`REVEALING · ${Math.max(0,elapsed-duration)}s`:r&&r.phase==='result'?`RESULT · ${r.result||'PENDING'}`:'LIVE';return `<div class="game-top"><span class="g-title">${title}</span><span class="game-status">${status}</span><span>Round ID : ${round}</span></div>`}
+function alwaysGameSpinner(){const active=Boolean(state.andarSpinning||state.l7Spin||state.tpSpin||state.dtSpin);return active?`<div class="always-spinner" aria-label="Live game resolving"><div class="spinner"></div></div>`:`<div class="game-live-indicator" aria-label="Live game">● LIVE</div>`}
 
 
 /* ===== LOGIN ===== */

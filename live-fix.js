@@ -161,11 +161,15 @@
   window.gameTop = function (title, round, cards) {
     var keyMap = { 'ANDAR BAHAR': 'andar-bahar', 'LUCKY 7': 'lucky7', 'TEEN PATTI': 'teen-patti', 'DRAGON TIGER': 'dragon-tiger' };
     var key = keyMap[title];
-    var r = key && typeof ensureRound === 'function' ? ensureRound(key) : null;
+    var r = key && state.sharedRounds && state.sharedRounds[key] ? state.sharedRounds[key] : (key && typeof ensureRound === 'function' ? ensureRound(key) : null);
     var status = '';
     if (r && typeof roundSeconds === 'function') {
-      status = r.phase === 'betting' ? ('BET ' + roundSeconds(key) + 's')
-        : r.phase === 'locked' ? ('LOCKED ' + roundSeconds(key) + 's')
+      var clock = Number.isFinite(Number(r.timer)) ? Math.max(0, Number(r.timer)) : roundSeconds(key);
+      var betClock = Number.isFinite(Number(r.betTimer)) ? Math.max(0, Number(r.betTimer)) : clock;
+      status = r.phase === 'betting' ? ('BET ' + clock + 's · LOCK IN ' + betClock + 's')
+        : r.phase === 'locked' ? ('LOCKED · REVEAL IN ' + clock + 's')
+        : r.phase === 'revealing' ? ('REVEALING · ' + Math.max(0, Math.floor((Date.now() - Number(r.startedAt || Date.now())) / 1000) - Number(r.duration || 0)) + 's')
+        : r.phase === 'result' ? ('RESULT · ' + (r.result || 'PENDING'))
         : String(r.phase || 'LIVE').toUpperCase();
     }
     return '<div class="game-top">' +
