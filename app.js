@@ -316,7 +316,7 @@ const state={
   loginDraft:{user:'',pass:'',otp:''},loginBusy:false,
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
-  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),controllerBets:[],controllerBetsBusy:false,
+  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),controllerBets:[],controllerRounds:{},controllerBetsBusy:false,
   welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
@@ -334,7 +334,7 @@ let sharedSyncBusy=false;
 async function syncControllerBets(){
   if(state.view!=='admin'||!state.adminAuthed||state.controllerBetsBusy)return;
   state.controllerBetsBusy=true;
-  try{const r=await fetch('/api/live-bets',{cache:'no-store'});if(r.ok){const d=await r.json();state.controllerBets=Array.isArray(d.bets)?d.bets:[];if(state.view==='admin')render()}}catch{}
+  try{const [betsRes,roundsRes]=await Promise.all([fetch('/api/live-bets',{cache:'no-store'}),fetch('/api/live-rounds',{cache:'no-store'})]);if(betsRes.ok){const d=await betsRes.json();state.controllerBets=Array.isArray(d.bets)?d.bets:[]}if(roundsRes.ok)state.controllerRounds=await roundsRes.json();if(state.view==='admin')render()}catch{}
   finally{state.controllerBetsBusy=false}
 }
 async function syncSharedRounds(){
@@ -1770,21 +1770,24 @@ function adminDecisionCards(){
     {key:'dragon-tiger',name:'Dragon Tiger',type:'DRAGON TIGER',sides:['Dragon','Tie','Tiger']}
   ];
   return defs.map(g=>{
-    const r=ensureRound(g.key);
+    const r=state.controllerRounds[g.key]||ensureRound(g.key);
     const gameBets=(state.controllerBets||[]).filter(b=>b.gameKey===g.key&&b.roundId===r.roundId);
     const totals=g.sides.reduce((out,s)=>(out[s]=gameBets.filter(b=>(b.side||b.team)===s).reduce((n,b)=>n+(Number(b.amt)||0),0),out),{});
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
     const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
-    const left=roundSeconds(g.key);
+    const left=Math.max(0,(r.duration||GAME_TIMINGS[g.key]?.duration||30)-elapsed);
+    const revealElapsed=Math.max(0,elapsed-(r.duration||GAME_TIMINGS[g.key]?.duration||30));
+    const resultElapsed=r.resultAt?Math.max(0,Math.floor((Date.now()-Number(r.resultAt))/1000)):0;
+    const status=r.phase==='betting'?`BETTING · ${left}s`:r.phase==='locked'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`DECISION · ${escapeHTML(r.result||'—')}`:String(r.phase||'LIVE').toUpperCase();
     return `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="color:#f0c040">${g.name}</strong>
         <span style="font-size:11px;color:#8b949e">Round <b style="color:#58a6ff">${r.roundId||'—'}</b></span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px">
-        <span style="background:#21262d;padding:4px 8px;border-radius:4px">Phase: <b style="color:${r.phase==='betting'?'#3fb950':r.phase==='forced'?'#f0c040':'#f85149'}">${(r.phase||'idle').toUpperCase()}</b></span>
-        <span style="background:#21262d;padding:4px 8px;border-radius:4px">⏱ <b>${left}s</b></span>
-        ${r.forcedWinner?`<span style="background:#3d2a00;color:#f0c040;padding:4px 8px;border-radius:4px">FORCE: ${r.forcedWinner}</span>`:''}
+        <span class="controller-status ${r.phase||''}">${status}</span>
+        ${r.phase==='result'?`<span class="controller-result">Result hold ${Math.max(0,7-resultElapsed)}s · next timer starts with new round</span>`:''}
+        ${r.forcedWinner?`<span class="controller-force">FORCE QUEUED: ${escapeHTML(r.forcedWinner)}</span>`:''}
       </div>
       <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · ${gameBets.reduce((n,b)=>n+(Number(b.amt)||0),0)} coins</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
