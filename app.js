@@ -223,6 +223,7 @@ function startNewRound(gameKey, secs){
     phase:'betting',
     timer:Math.max(5,parseInt(secs,10)||30),
     duration:Math.max(5,parseInt(secs,10)||30),
+    lockSeconds:GAME_TIMINGS[gameKey]?.lock??4,
     forcedWinner:null,
     startedAt:Date.now()
   };
@@ -264,7 +265,7 @@ function startNewRoundSilent(key,secs=30){
 function scheduleNextRound(key,delay=NEXT_ROUND_DELAY_MS){
   clearTimeout(scheduleNextRound.timers?.[key]);
   scheduleNextRound.timers=scheduleNextRound.timers||{};
-  scheduleNextRound.timers[key]=setTimeout(()=>{startNewRoundSilent(key,30);state.resolving[key]=false;render()},delay);
+  scheduleNextRound.timers[key]=setTimeout(()=>{startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);state.resolving[key]=false;render()},delay);
 }
 function finishRound(key){
   const all=getLiveRounds(), r=all[key]||ensureRound(key);
@@ -758,8 +759,8 @@ function shell(body){
 }
 function topBtn(){return `<button class="menu-btn" onclick="state.menu=true;render()">☰ MAIN MENU</button>`}
 function back(){return `<button class="back-btn" onclick="go('home')">BACK TO MAIN MENU</button>`}
-function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?'BET '+roundSeconds(key)+'s':(r&&r.phase==='locked'?'LOCKED '+roundSeconds(key)+'s':(r?(r.phase||'LIVE').toUpperCase():'LIVE'));return `<div class="game-top"><span class="g-title">${title}</span><span>Round ID : ${round}</span></div>`}
-function alwaysGameSpinner(){return `<div class="always-spinner" aria-label="Live game loading"><div class="spinner"></div></div>`}
+function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?'BET '+roundSeconds(key)+'s':(r&&r.phase==='locked'?'LOCKED '+roundSeconds(key)+'s':(r?(r.phase||'LIVE').toUpperCase():'LIVE'));return `<div class="game-top"><span class="g-title">${title}</span><span class="game-status">● ${status}</span><span>Round ID : ${round}</span></div>`}
+function alwaysGameSpinner(){return `<div class="game-live-indicator" aria-label="Live game status">● LIVE GAME</div>`}
 
 
 /* ===== LOGIN ===== */
