@@ -271,7 +271,6 @@ function scheduleNextRound(key,delay=NEXT_ROUND_DELAY_MS){
 function finishRound(key){
   const all=getLiveRounds(), r=all[key]||ensureRound(key);
   r.phase='result';r.timer=0;r.resultAt=Date.now();all[key]=r;setLiveRounds(all);
-  setTimeout(()=>scheduleNextRound(key,NEXT_ROUND_DELAY_MS),RESULT_HOLD_MS);
 }
 function smartDecision(key,options,natural){
   const forced=getForced(key);
@@ -281,11 +280,11 @@ function smartDecision(key,options,natural){
   }
   return natural||options[Math.floor(Math.random()*options.length)];
 }
-function stakeControl(key){const balance=getCoins();const defaultStake=Math.min(100,balance);return `<div class="stake-control"><label>BET AMOUNT<br><small>Balance: ${balance.toLocaleString()} chips</small></label><input id="stake-${key}" type="number" min="1" max="${Math.min(20000,balance)}" step="1" value="${defaultStake}" inputmode="numeric" aria-label="Bet amount"><div class="stake-chips" role="group" aria-label="Quick bet amount"><button type="button" onclick="setStake('${key}',50)">50</button><button type="button" onclick="setStake('${key}',100)">100</button><button type="button" onclick="setStake('${key}',500)">500</button></div></div>`}
+function stakeControl(key){const balance=getCoins();const defaultStake=balance>=100?100:0;return `<div class="stake-control"><label>BET AMOUNT<br><small>Min 100 · Balance: ${balance.toLocaleString()} chips</small></label><input id="stake-${key}" type="number" min="100" max="${Math.min(20000,balance)}" step="1" value="${defaultStake||''}" inputmode="numeric" aria-label="Bet amount"><div class="stake-chips" role="group" aria-label="Quick bet amount"><button type="button" onclick="setStake('${key}',100)">100</button><button type="button" onclick="setStake('${key}',500)">500</button></div></div>`}
 function setStake(key,value){const input=document.getElementById('stake-'+key);if(input)input.value=Math.min(Number(value)||1,Number(input.max)||getCoins());}
 function readStake(key){
   const n=Number((document.getElementById('stake-'+key)||{}).value||0);
-  if(!Number.isInteger(n)||n<1||n>20000){toast('Bet amount 1 se 20,000 chips ke beech rakho');return 0}
+  if(!Number.isInteger(n)||n<100||n>20000){toast('Bet amount 100 se 20,000 chips ke beech rakho');return 0}
   if(n>getCoins()){toast('Bet amount aapke chips se zyada nahi ho sakta');return 0}
   return n;
 }
@@ -304,9 +303,6 @@ function tickRounds(){
       // The timer-driven game scheduler owns the result sequence.
     }
     if(r.phase==='locked'&&roundSeconds(key)<=0){ /* resolved by live-fix scheduler */ }
-    if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS){
-      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
-    }
   }
 }
 setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
@@ -1184,6 +1180,13 @@ function playAndarBahar(side){
     setTimeout(reveal,CARD_GAP_MS);
   },CARD_GAP_MS);
 }
+function previousResultsHTML(){
+  const key={lucky7:'lucky7',teenpatti:'teen-patti',dragontiger:'dragon-tiger',andar:'andar-bahar'}[state.view]||state.view;
+  const remote=getLiveRounds()[key]?.previousResults||[];
+  const local=state.previousResults?.[key]?.history||[];
+  const history=(remote.length?remote:local).slice(0,10);
+  return `<div class="section-gold result-heading"><span>Previous Results</span><span>Last 10</span></div><div class="last-result previous-results">${(history.length?history:['—','—','—','—','—']).map(x=>`<div class="result-dot">${String(x)[0]}</div>`).join('')}</div>`;
+}
 function lucky7(){
   const live=getGamesLive()['lucky7'];
   if(!live) return `${topBtn()}<div class="view-title">LUCKY 7</div><div style="padding:40px;text-align:center;color:#666">Offline</div>${back()}`;
@@ -1200,7 +1203,7 @@ function lucky7(){
       <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7 DOWN')">${typeof lockLabel==='function'?lockLabel('lucky7'):'🔒'}</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='LUCKY 7').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1231,7 +1234,7 @@ function teenpatti(){
       <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Team B')">${typeof lockLabel==='function'?lockLabel('teen-patti'):'🔒'}</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='TEEN PATTI').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1277,7 +1280,7 @@ function dragontiger(){
       <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Tiger')">${typeof lockLabel==='function'?lockLabel('dragon-tiger'):'🔒'}</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='DRAGON TIGER').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
