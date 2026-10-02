@@ -242,8 +242,8 @@ function getForced(gameKey){
   return r&&r.forcedWinner?r.forcedWinner:null;
 }
 const GAME_KEYS=['andar-bahar','lucky7','teen-patti','dragon-tiger'];
-const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:4}};
-const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=5000;
+const GAME_TIMINGS={'andar-bahar':{duration:20,lock:0},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:0}};
+const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=3000;
 function roundSeconds(key){
   const r=ensureRound(key);const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
   return Math.max(0,(r.duration||GAME_TIMINGS[key]?.duration||30)-elapsed);
@@ -260,7 +260,7 @@ function startNewRoundSilent(key,secs=30){
 function scheduleNextRound(key,delay=NEXT_ROUND_DELAY_MS){
   clearTimeout(scheduleNextRound.timers?.[key]);
   scheduleNextRound.timers=scheduleNextRound.timers||{};
-  scheduleNextRound.timers[key]=setTimeout(()=>{startNewRoundSilent(key,30);state.resolving[key]=false;render()},delay);
+  scheduleNextRound.timers[key]=setTimeout(()=>{startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);state.resolving[key]=false;render()},delay);
 }
 function finishRound(key){
   const all=getLiveRounds(), r=all[key]||ensureRound(key);
@@ -293,13 +293,11 @@ function tickRounds(){
     const r=ensureRound(key);
     if(r.phase==='betting'&&!bettingOpen(key)){
       r.phase='locked';r.timer=roundSeconds(key);r.lockedAt=Date.now();const all=getLiveRounds();all[key]=r;setLiveRounds(all);
-      setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){startNewRoundSilent(key,30);if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},3000);
+      // The timer-driven game scheduler owns the result sequence.
     }
-    if(r.phase==='locked'&&roundSeconds(key)<=0){
-      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
-    }
+    if(r.phase==='locked'&&roundSeconds(key)<=0){ /* resolved by live-fix scheduler */ }
     if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS){
-      startNewRoundSilent(key,30);
+      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
     }
   }
 }

@@ -283,3 +283,36 @@
 
   console.log('[AntPro] live-fix minimal + AB joker');
 })();
+
+/* Timer-driven casino rounds: betting stays open until the configured lock,
+   then cards resolve automatically even when nobody clicks a bet button. */
+(function () {
+  'use strict';
+  var CFG = {'andar-bahar':{duration:20,lock:0},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:0}};
+  var GAP=2500, roundSeen={};
+  function cfg(k){return CFG[k]||{duration:20,lock:0}}
+  function all(){return typeof getLiveRounds==='function'?getLiveRounds():{}}
+  function save(a){if(typeof setLiveRounds==='function')setLiveRounds(a)}
+  function cur(k){var a=all(),c=cfg(k),r=a[k];if(!r||r.duration!==c.duration||r.lockSeconds!==c.lock){r={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:c.duration,duration:c.duration,lockSeconds:c.lock,forcedWinner:null,startedAt:Date.now()};a[k]=r;save(a)}return r}
+  function elapsed(r){return Math.max(0,Math.floor((Date.now()-Number(r.startedAt||Date.now()))/1000))}
+  function active(k){return !!(state.resolving&&state.resolving[k])}
+  function deck(){return typeof freshDeck==='function'?freshDeck():[]}
+  function setR(k,p){var a=all(),r=a[k]||cur(k);Object.keys(p||{}).forEach(function(x){r[x]=p[x]});a[k]=r;save(a);return r}
+  function reset(k,r){if(roundSeen[k]===r.roundId)return;roundSeen[k]=r.roundId;state.pendingBets=state.pendingBets||{};state.pendingBets[k]=[];if(k==='andar-bahar'){var d=deck();state.abJoker=d.pop()||null;state.andarCards={andar:[],bahar:[]};state.andarSpinning=false}else if(k==='lucky7'){state.l7Card=null;state.l7Spin=false}else if(k==='teen-patti'){state.tpPlayer=[];state.tpDealer=[];state.tpSpin=false}else{state.dtDragon=null;state.dtTiger=null;state.dtSpin=false}}
+  function place(k,side,type,rate){var r=cur(k),c=cfg(k);if(r.phase!=='betting'||elapsed(r)>=c.duration-c.lock||active(k)){toast('Betting locked — next round automatic start hoga');return}var amt=readStake(k);if(!amt||getCoins()<amt){if(getCoins()<amt)toast('Chips kam hain');return}syncPlayerChips(getCoins()-amt);state.pendingBets=state.pendingBets||{};state.pendingBets[k]=state.pendingBets[k]||[];state.pendingBets[k].push({team:side,type:type,rate:rate,amt:amt,player:state.user&&state.user.id||'Player'});render()}
+  function settle(k,winner){var bets=(state.pendingBets&&state.pendingBets[k])||[];bets.forEach(function(b){var won=b.team===winner,p=Math.round(b.amt*(b.rate-1));if(won)syncPlayerChips(getCoins()+b.amt+p);pushSettledBet({team:b.team,type:b.type,rate:b.rate,amt:b.amt,profit:p,player:b.player,status:won?'won':'lost',result:won?'WON +'+(b.amt+p):'LOST -'+b.amt})});state.pendingBets[k]=[];if(k==='andar-bahar'){state.abHistory=state.abHistory||[];state.abHistory.unshift(winner==='Andar'?'A':'B');state.andarSpinning=false}else if(k==='lucky7')state.l7Spin=false;else if(k==='teen-patti')state.tpSpin=false;else state.dtSpin=false;state.resolving[k]=false;setR(k,{phase:'result',timer:0,result:winner,resultAt:Date.now()});render();setTimeout(function(){if(!active(k))newRound(k)},k==='dragon-tiger'||k==='teen-patti'?3000:2000)}
+  function newRound(k){var c=cfg(k),a=all();a[k]={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:c.duration,duration:c.duration,lockSeconds:c.lock,forcedWinner:null,startedAt:Date.now()};save(a);try{fetch('/api/live-rounds/'+encodeURIComponent(k)+'/new',{method:'POST'}).catch(function(){})}catch(e){}reset(k,a[k]);render()}
+  function decide(k,opts,n){return smartDecision(k,opts,n)}
+  function resolveAB(){var k='andar-bahar',d=deck(),j=state.abJoker,a=[],b=[],first='Andar',win=null;state.resolving[k]=true;state.andarSpinning=true;state.andarCards={andar:[],bahar:[]};render();function done(){settle(k,decide(k,['Andar','Bahar'],win||'Andar'))}function rev(){var c=d.pop();if(!c)return done();(first==='Andar'?a:b).push(c);state.andarCards={andar:a.slice(),bahar:b.slice()};render();if(j&&c.v===j.v)win=first;first=first==='Andar'?'Bahar':'Andar';if(!win)setTimeout(rev,GAP);else setTimeout(done,2000)}rev()}
+  function resolveLucky(){var k='lucky7',c=deck()[0];state.resolving[k]=true;state.l7Spin=true;state.l7Card=null;render();state.l7Card=c;state.l7Spin=false;render();var n=cardRank(c)>7?'7 UP':cardRank(c)<7?'7 DOWN':'7';setTimeout(function(){settle(k,decide(k,['7 UP','7','7 DOWN'],n))},2000)}
+  function resolveTeen(){var k='teen-patti',d=deck(),p=[d.pop(),d.pop(),d.pop()],q=[d.pop(),d.pop(),d.pop()],i=0;state.resolving[k]=true;state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();function rev(){if(i<6){if(i%2===0)state.tpPlayer.push(p[Math.floor(i/2)]);else state.tpDealer.push(q[Math.floor(i/2)]);i++;render();setTimeout(rev,GAP+500)}else{var ps=handScore(p),ds=handScore(q);setTimeout(function(){settle(k,decide(k,['Team A','Tie','Team B'],ps>ds?'Team A':ds>ps?'Team B':'Tie'))},3000)}}rev()}
+  function resolveDragon(){var k='dragon-tiger',d=deck(),x=d.pop(),y=d.pop();state.resolving[k]=true;state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();state.dtDragon=x;render();setTimeout(function(){state.dtTiger=y;state.dtSpin=false;render();var n=cardRank(x)>cardRank(y)?'Dragon':cardRank(y)>cardRank(x)?'Tiger':'Tie';setTimeout(function(){settle(k,decide(k,['Dragon','Tie','Tiger'],n))},3000)},GAP)}
+  function resolve(k){if(k==='andar-bahar')resolveAB();else if(k==='lucky7')resolveLucky();else if(k==='teen-patti')resolveTeen();else resolveDragon()}
+  window.playAndarBahar=function(s){place('andar-bahar',s,'AndarBahar',1.95)};
+  window.playLucky7=function(s){place('lucky7',s,'LUCKY 7',s==='7'?11:1.95)};
+  window.playTeenPatti=function(s){place('teen-patti',s,'TEEN PATTI',s==='Tie'?8.5:1.98)};
+  window.playDragonTiger=function(s){place('dragon-tiger',s,'DRAGON TIGER',s==='Tie'?9:1.95)};
+  window.canPlaceBet=function(k){var r=cur(k),c=cfg(k);return r.phase==='betting'&&elapsed(r)<c.duration-c.lock&&!active(k)};
+  window.__antproTimerTick=function(){['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if(r.phase==='locked'&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'||k==='teen-patti'?3000:2000))newRound(k)});if(['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)>=0)render()};
+  setInterval(window.__antproTimerTick,250);setTimeout(window.__antproTimerTick,100);
+})();
