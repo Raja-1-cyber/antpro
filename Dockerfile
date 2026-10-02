@@ -1,13 +1,18 @@
-FROM node:22-alpine
+# Python base image specify karein
+FROM python:3.10-slim
 
+# Working directory set karein
 WORKDIR /app
-ENV NODE_ENV=production
 
-COPY package.json ./
-COPY index.html app.js styles.css refinement.css favicon.svg app.config.ts manus-routes.json ./
-COPY server.mjs ./
-COPY assets ./assets
-COPY data ./data
+# Dependencies copy karke install karein
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 3000
-CMD ["node", "server.mjs"]
+# Scraper code copy karein
+COPY . .
+
+# Environment variables (Railway se pass hongi)
+ENV PYTHONUNBUFFERED=1
+
+# Scraper run karne ki command
+CMD ["python", "cricket_scraper.py"]
