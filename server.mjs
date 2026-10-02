@@ -24,6 +24,8 @@ function normalizeUsers(u){u=u||{};u.superMasters=u.superMasters||{};u.masters=u
 function mergeUsers(current,incoming){const merged={...(current||{}),...(incoming||{})};for(const bucket of ['masters','superMasters','agents','players'])merged[bucket]={...((current&&current[bucket])||{}),...((incoming&&incoming[bucket])||{})};if(!incoming?.superMaster&&current?.superMaster)merged.superMaster=current.superMaster;return normalizeUsers(merged)}
 function saveUsersFile(u){u=normalizeUsers(u);const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(u,null,2));fs.renameSync(tmp,usersFile)}
 async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+async function restoreUsersFromFirebase(){try{const r=await fetch(FIREBASE_DB+'/users.json',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!r.ok)return false;const remote=await r.json();if(!remote||!remote.masters?.MASTER)return false;if(remote.superMaster&&typeof remote.superMaster==='object'){remote.superMasters={...(remote.superMasters||{}),[remote.superMaster.id||'SUPER']:remote.superMaster}}const local=loadUsersFile();const merged=mergeUsers(local,remote);saveUsersFile(merged);console.log(`restored users from Firebase: ${Object.keys(merged.agents).length} agents, ${Object.keys(merged.players).length} clients`);return true}catch(e){console.warn('firebase users restore skipped',e.message);return false}}
+const usersReady=restoreUsersFromFirebase();
 async function fetchFirebaseLive(){
   try{
     const [matchesRes,metaRes]=await Promise.all([
@@ -98,8 +100,8 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(force&&req.method==='POST'){const key=decodeURIComponent(force[1]);const body=await readBody(req);const r=currentRound(key);if(!GAME_DEFS[key]||typeof body.side!=='string')return json(res,400,{ok:false,error:'invalid game or side'});r.forcedWinner=body.side;rounds[key]=r;persist();return json(res,200,{ok:true,round:r})}
   const fresh=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/new$/);
   if(fresh&&req.method==='POST'){const key=decodeURIComponent(fresh[1]);if(!GAME_DEFS[key])return json(res,404,{ok:false,error:'unknown game'});const current=currentRound(key);if(current.phase==='betting')return json(res,200,{ok:true,round:current});return json(res,200,{ok:true,round:newRound(key,GAME_DEFS[key].duration)})}
-  if(u.pathname==='/api/users'&&req.method==='GET'){return json(res,200,{ok:true,users:loadUsersFile()})}
-  if(u.pathname==='/api/users'&&req.method==='POST'){const body=await readBody(req);const users=body.users||body;if(!users||!users.masters?.MASTER)return json(res,400,{ok:false,error:'invalid users payload'});const merged=mergeUsers(loadUsersFile(),users);saveUsersFile(merged);mirrorUsersToFirebase(merged);return json(res,200,{ok:true})}
+  if(u.pathname==='/api/users'&&req.method==='GET'){await usersReady;return json(res,200,{ok:true,users:loadUsersFile()})}
+  if(u.pathname==='/api/users'&&req.method==='POST'){await usersReady;const body=await readBody(req);const users=body.users||body;if(!users||!users.masters?.MASTER)return json(res,400,{ok:false,error:'invalid users payload'});const merged=mergeUsers(loadUsersFile(),users);saveUsersFile(merged);mirrorUsersToFirebase(merged);return json(res,200,{ok:true})}
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const data=await fetchFirebaseLive();if(!data)return json(res,502,{ok:false,error:'firebase unavailable'});return json(res,200,{ok:true,live_matches:data.live_matches,meta:data.meta,newestUpdate:data.newestUpdate,fresh:firebaseIsFresh(data)})}
   return serveStatic(req,res,u);
 }catch(err){console.error(err);return json(res,500,{ok:false,error:'server error'})}});
