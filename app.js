@@ -51,7 +51,17 @@ function loadUsers(){
   try{localStorage.setItem(USERS_KEY,JSON.stringify(d))}catch{}
   return d;
 }
+function normalizeHierarchy(data){
+  data=data||{};data.superMasters=data.superMasters||{};data.masters=data.masters||{};data.agents=data.agents||{};data.players=data.players||{};
+  if(!data.masters.MASTER)data.masters.MASTER={id:'MASTER',name:'Root Master',role:'master',pass:'master123',chips:0,agents:[],status:'active'};
+  Object.values(data.masters).forEach(m=>{m.agents=[];m.status=m.status||'active'});
+  Object.values(data.superMasters).forEach(sm=>{sm.agents=[];sm.status=sm.status||'active';const parent=data.masters[sm.parentMasterId||'MASTER'];if(parent){parent.superMasters=parent.superMasters||[];if(!parent.superMasters.includes(sm.id))parent.superMasters.push(sm.id)}});
+  Object.values(data.agents).forEach(a=>{a.players=[];a.status=a.status||'active';const parent=data.masters[a.masterId||'MASTER'];if(parent&&!parent.agents.includes(a.id))parent.agents.push(a.id);const sm=data.superMasters[a.superId];if(sm&&!sm.agents.includes(a.id))sm.agents.push(a.id)});
+  Object.values(data.players).forEach(p=>{p.status=p.status||'active';const agent=data.agents[p.agentId];if(agent&&!agent.players.includes(p.id))agent.players.push(p.id)});
+  return data;
+}
 function saveUsers(u){
+  u=normalizeHierarchy(u);
   try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
   // permanent server + Firebase mirror (fire-and-forget)
   fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:u})}).catch(()=>{});
@@ -1394,14 +1404,20 @@ function masterCreateSuperMaster(){
   const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
   if(!id||!pass){toast('Super ID + Password required');return}
   const data=loadUsers();if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
-  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,parentMasterId:state.user.id,status:'active'};saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,parentMasterId:state.user.id,status:'active',agents:[]};
+  data.masters[state.user.id].superMasters=data.masters[state.user.id].superMasters||[];data.masters[state.user.id].superMasters.push(id);
+  saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
 }
 function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('Agent ID + Password required');return}
   const data=loadUsers();if(data.agents[id]){toast('Agent ID exists');return}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,masterId:(state.user.parentMasterId||'MASTER'),superId:state.user.id,players:[],status:'active'};saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
+  const masterId=state.user.parentMasterId||'MASTER';
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,masterId,superId:state.user.id,players:[],status:'active'};
+  data.superMasters[state.user.id].agents=data.superMasters[state.user.id].agents||[];data.superMasters[state.user.id].agents.push(id);
+  data.masters[masterId].agents=data.masters[masterId].agents||[];data.masters[masterId].agents.push(id);
+  saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created and saved in hierarchy');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
@@ -1574,7 +1590,11 @@ function agentCreateClient(){
   const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
   const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
-  data.players[id]={id,name,role:'player',pass,chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};if(!data.agents[aid].players)data.agents[aid].players=[];data.agents[aid].players.push(id);saveUsers(data);state.createClient=false;toast('Client '+id+' created under '+aid);render();
+  if(role==='agent'&&aid!==state.user.id){toast('Sirf apne clients bana sakte ho');return}
+  if(role==='supermaster'&&!hierarchyAgents(data,state.user.id).some(a=>a.id===aid)){toast('Ye Agent aapke under nahi hai');return}
+  data.players[id]={id,name,role:'player',pass,chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};
+  data.agents[aid].players=data.agents[aid].players||[];if(!data.agents[aid].players.includes(id))data.agents[aid].players.push(id);
+  saveUsers(data);state.createClient=false;toast('Client '+id+' created and saved under Agent '+aid);render();
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
