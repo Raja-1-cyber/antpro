@@ -41,10 +41,19 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+def clean_database_url(value: str) -> str:
+    """Accept a plain URL or a mistakenly pasted Markdown link from Railway."""
+    raw = str(value or "").strip().strip('`').strip('"').strip("'")
+    match = re.search(r"https?://[^\s\]\)\"']+", raw)
+    if not match:
+        return ""
+    return match.group(0).rstrip("/").rstrip('"').rstrip("'").rstrip('`')
+
+
 load_dotenv()
 
 POLL_INTERVAL = float(os.getenv("POLL_INTERVAL", "5"))  # seconds
-FIREBASE_DB_URL = os.getenv("FIREBASE_DATABASE_URL", "")
+FIREBASE_DB_URL = clean_database_url(os.getenv("FIREBASE_DATABASE_URL", ""))
 FIREBASE_CRED_PATH = os.getenv("FIREBASE_CREDENTIALS", "serviceAccountKey.json")
 USER_AGENT = os.getenv(
     "USER_AGENT",
