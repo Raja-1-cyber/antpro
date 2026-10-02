@@ -414,50 +414,13 @@ function creditChips(userId, amount, note){
   addStatement({type:'CHIP', userId, amount, note:note||'', balance:next});
 }
 function applyCascade(bet){
-  /* Multi-level share cascade on settled casino/session bets (coins only) */
+  /* Settlements are player-only virtual coins. No automatic upline share or commission payouts. */
   if(!bet||bet.rolled_back) return;
   const playerId=bet.player||bet.playerId; if(!playerId) return;
-  const pl=findUserById(playerId); if(!pl||pl.role!=='player') return;
-  const agent=pl.agentId?findUserById(pl.agentId):null;
-  const master=agent&&agent.masterId?findUserById(agent.masterId):null;
   const amt=Number(bet.amt)||0;
   const profit=Number(bet.profit)||0;
   const won=bet.status==='won';
-  const agentShare=Number(agent&&agent.share)||0;
-  const masterShare=Number(master&&master.share)||0;
-  const agentCommPct=Number(agent&&agent.commission)||0;
-  const lines=[];
-  if(won){
-    // upline pays player's profit according to share
-    if(agent){
-      const cut=Math.floor(profit*(agentShare/100));
-      if(cut){creditChips(agent.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:-cut, kind:'share_win'});}
-      const comm=Math.floor(profit*(agentCommPct/100));
-      if(comm){creditChips(agent.id, comm, 'Commission on win '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
-    }
-    if(master){
-      const cut=Math.floor(profit*(masterShare/100));
-      if(cut){creditChips(master.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:master.id, role:'master', amount:-cut, kind:'share_win'});}
-    }
-  } else if(bet.status==='lost'){
-    // upline receives share of player loss
-    if(agent){
-      const take=Math.floor(amt*(agentShare/100));
-      if(take){creditChips(agent.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:take, kind:'share_loss'});}
-      const comm=Math.floor(amt*(agentCommPct/100));
-      if(comm){creditChips(agent.id, comm, 'Commission on loss '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
-    }
-    if(master){
-      const take=Math.floor(amt*(masterShare/100));
-      if(take){creditChips(master.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:master.id, role:'master', amount:take, kind:'share_loss'});}
-    }
-  }
-  if(lines.length){
-    const comms=loadCommissions();
-    comms.unshift({betId:bet.id, player:playerId, market:bet.type, status:bet.status, amt, profit, lines, ts:Date.now()});
-    saveCommissions(comms);
-  }
-  addStatement({type:'BET', userId:playerId, amount:won?(profit):(-(amt)), note:(bet.type||'')+' '+(bet.team||'')+' '+(bet.status||''), betId:bet.id, market:bet.type, side:bet.team, status:bet.status});
+  addStatement({type:'BET', userId:playerId, amount:won?profit:-amt, note:(bet.type||'')+' '+(bet.team||'')+' '+(bet.status||''), betId:bet.id, market:bet.type, side:bet.team, status:bet.status});
 }
 function pushSettledBet(partial){
   const bet={

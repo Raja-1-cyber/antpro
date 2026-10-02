@@ -291,6 +291,7 @@
   var CFG = {'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
   var GAP=2500, roundSeen={};
   function cfg(k){return CFG[k]||{duration:20,lock:0}}
+  window.applyCascade=function(){/* automatic commission/share payouts disabled */};
   state.previousResults=state.previousResults||JSON.parse(localStorage.getItem('antpro_previous_results')||'{}');
   window.lockLabel=function(k){return window.canPlaceBet&&window.canPlaceBet(k)?'BET':'LOCKED'};
   function all(){return typeof getLiveRounds==='function'?getLiveRounds():{}}
