@@ -1,50 +1,49 @@
 {
   "andar-bahar": {
     "gameKey": "andar-bahar",
-    "roundId": "R-MUQXAA1W",
+    "roundId": "R-MUQXQKUY",
     "phase": "locked",
     "timer": 0,
     "duration": 20,
     "lockSeconds": 0,
     "forcedWinner": null,
-    "startedAt": 1790943107684,
+    "startedAt": 1790943868186,
     "betTimer": 1,
-    "lockedAt": 1790943127684
+    "lockedAt": 1790943888186
   },
   "lucky7": {
     "gameKey": "lucky7",
-    "roundId": "R-MUQXAA1W",
+    "roundId": "R-MUQXQQZM",
     "phase": "locked",
-    "timer": 0,
+    "timer": 4,
     "duration": 15,
     "lockSeconds": 4,
     "forcedWinner": null,
-    "startedAt": 1790943107684,
+    "startedAt": 1790943876130,
     "betTimer": 0,
-    "lockedAt": 1790943118684
+    "lockedAt": 1790943887130
   },
   "teen-patti": {
     "gameKey": "teen-patti",
-    "roundId": "R-MUQXAA1W",
+    "roundId": "R-MUQXQ66O",
     "phase": "locked",
-    "timer": 1,
+    "timer": 0,
     "duration": 20,
     "lockSeconds": 5,
     "forcedWinner": null,
-    "startedAt": 1790943107684,
+    "startedAt": 1790943849168,
     "betTimer": 0,
-    "lockedAt": 1790943122684
+    "lockedAt": 1790943864168
   },
   "dragon-tiger": {
     "gameKey": "dragon-tiger",
-    "roundId": "R-MUQXAA1W",
-    "phase": "locked",
-    "timer": 0,
+    "roundId": "R-MUQXQYBJ",
+    "phase": "betting",
+    "timer": 13,
     "duration": 15,
     "lockSeconds": 0,
     "forcedWinner": null,
-    "startedAt": 1790943107684,
-    "betTimer": 0,
-    "lockedAt": 1790943122684
+    "startedAt": 1790943885631,
+    "betTimer": 13
   }
 }

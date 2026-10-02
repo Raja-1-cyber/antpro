@@ -11,7 +11,7 @@ const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-defa
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
-const GAME_DEFS={'andar-bahar':{duration:20,lockSeconds:0},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:5},'dragon-tiger':{duration:15,lockSeconds:0}};
+const GAME_DEFS={'andar-bahar':{duration:20,lockSeconds:5},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:5},'dragon-tiger':{duration:15,lockSeconds:4}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
 let marquee='🌹 JAI SHREE SHYAM 🌹';try{marquee=JSON.parse(fs.readFileSync(marqueeFile,'utf8')).text||marquee}catch{}

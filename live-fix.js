@@ -288,7 +288,7 @@
    then cards resolve automatically even when nobody clicks a bet button. */
 (function () {
   'use strict';
-  var CFG = {'andar-bahar':{duration:20,lock:0},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:0}};
+  var CFG = {'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
   var GAP=2500, roundSeen={};
   function cfg(k){return CFG[k]||{duration:20,lock:0}}
   state.previousResults=state.previousResults||JSON.parse(localStorage.getItem('antpro_previous_results')||'{}');

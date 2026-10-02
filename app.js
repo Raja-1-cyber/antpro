@@ -242,7 +242,7 @@ function getForced(gameKey){
   return r&&r.forcedWinner?r.forcedWinner:null;
 }
 const GAME_KEYS=['andar-bahar','lucky7','teen-patti','dragon-tiger'];
-const GAME_TIMINGS={'andar-bahar':{duration:20,lock:0},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:0}};
+const GAME_TIMINGS={'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
 const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=3000;
 function roundSeconds(key){
   const r=ensureRound(key);const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
