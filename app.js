@@ -358,6 +358,7 @@ setInterval(syncSharedRounds,1000);
   if(p==='/x9k2-ns-ctrl'){state.view='admin';state.loggedIn=true}
   else if(p==='/login'||p==='/client-login'||p==='/agent-login'||p==='/master-login'||p==='/supermaster-login'){state.view='login';state.loginRole=roleFromPath();state.loggedIn=false}
   else if(p==='/inplay')state.view='inplay';
+  else if(p==='/match')state.view='match';
   else if(p==='/casino')state.view='casino';
   else if(p==='/andar-bahar')state.view='andar';
   else if(p==='/lucky7')state.view='lucky7';
@@ -366,7 +367,13 @@ setInterval(syncSharedRounds,1000);
   else if(p==='/ledger')state.view='ledger';
   else if(p==='/rules')state.view='rules';
   else if(p==='/hierarchy')state.view='hierarchy';
+  else if(p==='/clientdetails')state.view='clientdetails';
   else if(p==='/password')state.view='password';
+  else if(p==='/pnl')state.view='pnl';
+  else if(p==='/statement')state.view='statement';
+  else if(p==='/commission')state.view='commission';
+  else if(p==='/bethistory')state.view='bethistory';
+  else if(p==='/usermgmt')state.view='usermgmt';
   else state.view='home';
 })();
 
@@ -1026,6 +1033,8 @@ function match(){
   const stat = (p,...keys) => {if(typeof p!=='object'||!p)return '';for(const k of keys){if(p[k]!==undefined&&p[k]!==null&&p[k]!=='')return p[k]}return ''};
   const lastBalls = Array.isArray(m.lastBalls)?m.lastBalls:[];
   const bowlerStats=m.bowlerStats||{};
+  const bookmakerMin=Number.isFinite(Number(m.bookmakerMin))?Number(m.bookmakerMin):100;
+  const bookmakerMax=Number.isFinite(Number(m.bookmakerMax))?Number(m.bookmakerMax):20000;
 
   return `${topBtn()}
   <div class="match-head">
@@ -1062,7 +1071,7 @@ function match(){
   <div class="video-scorecard-wrap"><table class="video-scorecard"><thead><tr><th class="name-col">BATSMEN</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${scorecardPlayers.length?scorecardPlayers.map(p=>`<tr><td class="name-col">${escapeHTML(playerLabel(p))}</td><td>${escapeHTML(stat(p,'runs','score'))}</td><td>${escapeHTML(stat(p,'balls','ball'))}</td><td>${escapeHTML(stat(p,'fours','4s','boundaries4'))}</td><td>${escapeHTML(stat(p,'sixes','6s','boundaries6'))}</td><td>${escapeHTML(stat(p,'strikeRate','strike_rate','sr'))}</td></tr>`).join(''):'<tr><td colspan="6" class="provider-empty">Provider did not supply batter names</td></tr>'}</tbody><thead><tr><th class="name-col">BOWLER</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody><tr><td class="name-col">${escapeHTML(m.bowler||'Provider did not supply bowler name')}</td><td>${escapeHTML(bowlerStats.overs??m.overs??'')}</td><td>${escapeHTML(bowlerStats.maidens??'')}</td><td>${escapeHTML(bowlerStats.runs??'')}</td><td>${escapeHTML(bowlerStats.wickets??'')}</td><td>${escapeHTML(bowlerStats.economy??'')}</td></tr></tbody></table></div>
   <div class="section-bar">LAST BALLS</div><div class="last-balls scorecard-detail-grid"><div class="ball-strip">${lastBalls.length?lastBalls.map(b=>`<span>${escapeHTML(typeof b==='object'?(b.result||b.value||b.runs||'—'):b)}</span>`).join(''):'<em>Provider did not supply last-ball sequence</em>'}</div></div>
 
-  <div class="section-bar">BOOKMAKER | Min : NaN &nbsp; Max : —</div>
+  <div class="section-bar">BOOKMAKER | Min : ${bookmakerMin.toLocaleString()} &nbsp; Max : ${bookmakerMax.toLocaleString()}</div>
   <table class="bm-table">
     <thead><tr><th style="text-align:left">TEAM</th><th>LAGAI</th><th>KHAI</th><th>POS.</th></tr></thead>
     <tbody>
