@@ -60,6 +60,14 @@ function normalizeHierarchy(data){
   Object.values(data.players).forEach(p=>{p.status=p.status||'active';const agent=data.agents[p.agentId];if(agent&&!agent.players.includes(p.id))agent.players.push(p.id)});
   return data;
 }
+function mergeUserStores(local,remote){
+  const merged={...(local||{}),...(remote||{})};
+  ['masters','superMasters','agents','players'].forEach(bucket=>{
+    merged[bucket]={...((local&&local[bucket])||{}),...((remote&&remote[bucket])||{})};
+  });
+  if(!remote?.superMaster&&local?.superMaster)merged.superMaster=local.superMaster;
+  return normalizeHierarchy(merged);
+}
 function saveUsers(u){
   u=normalizeHierarchy(u);
   try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
@@ -85,8 +93,9 @@ async function syncUsersFromServer(){
     const r=await fetch('/api/users',{cache:'no-store'});
     const d=await r.json();
     if(d&&d.ok&&d.users&&d.users.masters?.MASTER){
-      localStorage.setItem(USERS_KEY,JSON.stringify(d.users));
-      return d.users;
+      const merged=mergeUserStores(loadUsers(),d.users);
+      localStorage.setItem(USERS_KEY,JSON.stringify(merged));
+      return merged;
     }
   }catch{}
   return loadUsers();
@@ -1598,7 +1607,9 @@ function agentCreateClient(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role)){toast('Not allowed');return}
   const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
-  const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
+  const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}
+  if(!data.agents[aid]&&role==='agent'&&String(state.user.id).toUpperCase()===aid){data.agents[aid]={...state.user,id:aid,role:'agent',players:[],status:'active'};}
+  if(!data.agents[aid]){toast('Agent not found — refresh hierarchy once');return}
   if(role==='agent'&&aid!==state.user.id){toast('Sirf apne clients bana sakte ho');return}
   if(role==='supermaster'&&!hierarchyAgents(data,state.user.id).some(a=>a.id===aid)){toast('Ye Agent aapke under nahi hai');return}
   data.players[id]={id,name,role:'player',pass,chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};
