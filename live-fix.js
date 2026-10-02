@@ -10,7 +10,7 @@
     var timings = (typeof GAME_TIMINGS !== 'undefined' && GAME_TIMINGS[key]) || { duration: 30, lock: 4 };
     var all = typeof getLiveRounds === 'function' ? getLiveRounds() : {};
     var r = all[key];
-    var needNew = !r || (r.phase !== 'betting' && r.phase !== 'locked' && r.phase !== 'result');
+    var needNew = !r || (r.phase !== 'betting' && r.phase !== 'locked' && r.phase !== 'revealing' && r.phase !== 'result');
     if (needNew) {
       var secs = timings.duration || 30;
       all[key] = {
@@ -262,7 +262,7 @@
   window.lockLabel=function(k){return window.bettingOpen&&window.bettingOpen(k)?'BET':'LOCKED'};
   function all(){return typeof getLiveRounds==='function'?getLiveRounds():{}}
   function save(a){if(typeof setLiveRounds==='function')setLiveRounds(a)}
-  function cur(k){var a=all(),c=cfg(k),r=a[k];var invalid=!r||!r.roundId||!Number.isFinite(Number(r.duration))||Number(r.duration)<=0||!Number.isFinite(Number(r.lockSeconds))||Number(r.lockSeconds)!==Number(c.lock)||Number(r.lockSeconds)<0||Number(r.lockSeconds)>=Number(r.duration);if(invalid||(!active(k)&&r.phase!=='betting'&&r.phase!=='locked'&&r.phase!=='result')){r={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:c.duration,duration:c.duration,lockSeconds:c.lock,forcedWinner:null,startedAt:Date.now(),previousResults:[]};a[k]=r;save(a);try{fetch('/api/live-rounds/'+encodeURIComponent(k)+'/new',{method:'POST'}).catch(function(){})}catch(e){}}return r}
+  function cur(k){var a=all(),c=cfg(k),r=a[k];var invalid=!r||!r.roundId||!Number.isFinite(Number(r.duration))||Number(r.duration)<=0||!Number.isFinite(Number(r.lockSeconds))||Number(r.lockSeconds)!==Number(c.lock)||Number(r.lockSeconds)<0||Number(r.lockSeconds)>=Number(r.duration);if(invalid||(!active(k)&&r.phase!=='betting'&&r.phase!=='locked'&&r.phase!=='revealing'&&r.phase!=='result'))){r={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:c.duration,duration:c.duration,lockSeconds:c.lock,forcedWinner:null,startedAt:Date.now(),previousResults:[]};a[k]=r;save(a);try{fetch('/api/live-rounds/'+encodeURIComponent(k)+'/new',{method:'POST'}).catch(function(){})}catch(e){}}return r}
   function elapsed(r){return Math.max(0,Math.floor((Date.now()-Number(r.startedAt||Date.now()))/1000))}
   function active(k){return !!(state.resolving&&state.resolving[k])}
   function deck(){return typeof freshDeck==='function'?freshDeck():[]}
@@ -290,6 +290,6 @@
   window.playTeenPatti=function(s){place('teen-patti',s,'TEEN PATTI',s==='Tie'?8.5:1.98)};
   window.playDragonTiger=function(s){place('dragon-tiger',s,'DRAGON TIGER',s==='Tie'?9:1.95)};
   window.canPlaceBet=function(k){var r=cur(k),c=cfg(k);return r.phase==='betting'&&elapsed(r)<c.duration-c.lock&&!active(k)};
-  window.__antproTimerTick=function(){if(!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if(r.phase==='locked'&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'||k==='teen-patti'?3000:2000))newRound(k)});render()};
+  window.__antproTimerTick=function(){if(!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if((r.phase==='locked'||r.phase==='revealing')&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'||k==='teen-patti'?3000:2000))newRound(k)});render()};
   setInterval(window.__antproTimerTick,500);setTimeout(window.__antproTimerTick,100);
 })();

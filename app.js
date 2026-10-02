@@ -1787,14 +1787,16 @@ function adminDecisionCards(){
     const gameBets=(state.controllerBets||[]).filter(b=>b.gameKey===g.key&&b.roundId===r.roundId);
     const totals=g.sides.reduce((out,s)=>(out[s]=gameBets.filter(b=>(b.side||b.team)===s).reduce((n,b)=>n+(Number(b.amt)||0),0),out),{});
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
-    const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
+    const elapsed=Math.max(0,Number.isFinite(Number(r.elapsedSeconds))?Number(r.elapsedSeconds):Math.floor((Date.now()-(r.startedAt||Date.now()))/1000));
     const duration=Number(r.duration)||GAME_TIMINGS[g.key]?.duration||30;
     const lock=Number.isFinite(Number(r.lockSeconds))?Number(r.lockSeconds):(GAME_TIMINGS[g.key]?.lock||0);
-    const left=Math.max(0,duration-elapsed);
+    const serverTimer=Math.max(0,Number.isFinite(Number(r.timer))?Number(r.timer):duration-elapsed);
+    const betLeft=Math.max(0,Number.isFinite(Number(r.betTimer))?Number(r.betTimer):duration-lock-elapsed);
+    const lockLeft=Math.max(0,duration-elapsed);
     const revealElapsed=Math.max(0,elapsed-duration);
     const resultElapsed=r.resultAt?Math.max(0,Math.floor((Date.now()-Number(r.resultAt))/1000)):0;
-    const betLeft=Math.max(0,left-lock);
-    const status=r.phase==='betting'?`BETTING · ${betLeft}s`:r.phase==='locked'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`DECISION · ${escapeHTML(r.result||'—')}`:String(r.phase||'LIVE').toUpperCase();
+    const resultHold=Math.max(0,7-resultElapsed);
+    const status=r.phase==='betting'?`BETTING · ROUND ${serverTimer}s · LOCK IN ${betLeft}s`:r.phase==='locked'?`LOCKED · REVEAL IN ${lockLeft}s`:r.phase==='revealing'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`RESULT · ${escapeHTML(r.result||'—')} · NEXT IN ${resultHold}s`:String(r.phase||'LIVE').toUpperCase();
     const previous=Array.isArray(r.previousResults)&&r.previousResults.length?r.previousResults[0]:'—';
     const totalCoins=Object.values(totals).reduce((n,v)=>n+v,0);
     return `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:10px">
@@ -1804,10 +1806,10 @@ function adminDecisionCards(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px">
         <span class="controller-status ${r.phase||''}">${status}</span>
-        ${r.phase==='result'?`<span class="controller-result">Result hold ${Math.max(0,7-resultElapsed)}s · next timer starts with new round</span>`:''}
+        ${r.phase==='result'?`<span class="controller-result">Result hold ${resultHold}s · next timer starts with new round</span>`:''}
         ${r.forcedWinner?`<span class="controller-force">FORCE QUEUED: ${escapeHTML(r.forcedWinner)}</span>`:''}
       </div>
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · ${totalCoins} coins · BET CLOSES IN ${r.phase==='betting'?betLeft:0}s</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · TOTAL ${totalCoins} coins · ROUND CLOCK ${serverTimer}s · ${r.phase==='betting'?`BET CLOSES IN ${betLeft}s`:'BETTING CLOSED'}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
