@@ -969,7 +969,7 @@ function inplay(){
   if(!state.liveMatches.length && !state.liveMatchesLoading && !state.liveMatchesError){
     fetchLiveCricket();
   }
-  const list = state.liveMatches.length ? state.liveMatches : MATCHES.map((x,i)=>({...x, id:i, homeScore:'', awayScore:'', status:x.live?'live':'upcoming', statusText:'', competition:''}));
+  const list = state.liveMatches;
   return `${topBtn()}
   <div class="view-title">IN PLAY — LIVE CRICKET</div>
   <div style="padding:6px 8px;font-size:10px;color:#666;background:#fff;border-bottom:1px solid #eee">

@@ -53,9 +53,7 @@ USER_AGENT = os.getenv(
 )
 
 # Public cricket widget used by the existing AntPro server (same source)
-SPORTSCORE_URL = (
-    "https://sportscore.com/api/widget/matches/?sport=cricket&limit=30"
-)
+SPORTSCORE_URL = os.getenv("SPORTSCORE_URL", "https://sportscore.com/api/widget/matches/?sport=cricket&limit=30")
 
 # Optional: extra public score page (fallback)
 CRICBUZZ_LIVE = "https://www.cricbuzz.com/cricket-match/live-scores"
@@ -154,8 +152,13 @@ async def fetch_json(session: aiohttp.ClientSession, url: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Match ID helper
+# Match ID/status helpers
 # ---------------------------------------------------------------------------
+def is_live_status(value: Any) -> bool:
+    status = re.sub(r"[^a-z]", "", str(value or "").lower())
+    return status in {"live","inplay","inprogress","started","playing","1stinnings","2ndinnings"}
+
+
 def make_match_id(name: str) -> str:
     """Stable short ID from team names."""
     clean = re.sub(r"[^A-Za-z0-9]", "", name.upper())[:24]
@@ -233,7 +236,7 @@ async def scrape_sportscore(session: aiohttp.ClientSession) -> list[dict[str, An
         away = (m.get("away") or "?").strip()
         name = f"{home} vs {away}"
         status_raw = (m.get("status") or "").lower()
-        is_live = status_raw == "live"
+        is_live = is_live_status(status_raw) or is_live_status(m.get("status_text"))
         home_score = m.get("home_score") or "—"
         away_score = m.get("away_score") or "—"
         # SportScore sometimes puts overs in status_text / time
