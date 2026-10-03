@@ -294,17 +294,21 @@ function canPlaceBet(key){
   return true;
 }
 function tickRounds(){
+  tickRounds.timers=tickRounds.timers||{};
   for(const key of GAME_KEYS){
     const r=ensureRound(key);
     if(r.phase==='betting'&&!bettingOpen(key)){
       r.phase='locked';r.timer=roundSeconds(key);r.lockedAt=Date.now();const all=getLiveRounds();all[key]=r;setLiveRounds(all);
-      setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){startNewRoundSilent(key,30);if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},3000);
+      clearTimeout(tickRounds.timers[key]);
+      tickRounds.timers[key]=setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},Math.max(100,(r.timer||0)*1000+100));
     }
     if(r.phase==='locked'&&roundSeconds(key)<=0){
+      clearTimeout(tickRounds.timers[key]);
       startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
     }
     if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS){
-      startNewRoundSilent(key,30);
+      clearTimeout(tickRounds.timers[key]);
+      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
     }
   }
 }
