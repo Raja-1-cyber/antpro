@@ -211,11 +211,8 @@
         return;
       }
 
-      // The bootstrap MASTER account must remain usable with its primary
-      // credentials even when the optional demo OTP field is missing.
-      // Other staff portals continue to require the demo OTP.
-      var bootstrapMaster = expected === 'master' && String(username).trim().toUpperCase() === 'MASTER';
-      if (expected !== 'player' && !bootstrapMaster) {
+      // All staff portals use the same demo OTP.
+      if (expected !== 'player') {
         if (!otp) {
           clearTimeout(safety);
           state.loginBusy = false;
