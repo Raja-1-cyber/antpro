@@ -196,7 +196,9 @@ function ensureRound(gameKey){
 function sideTotalsFor(gameType, sides){
   const totals={};
   sides.forEach(s=>totals[s]=0);
-  const bets=(state.serverBets&&state.serverBets.length?state.serverBets:state.activeBets)||[];
+  const merged=new Map();
+  [...(state.activeBets||[]),...(state.serverBets||[])].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
+  const bets=Array.from(merged.values()).filter(b=>['open','pending'].includes(String(b.status||'open').toLowerCase()));
   bets.filter(b=>{
     const t=(b.type||'').toLowerCase();
     if(gameType==='AndarBahar') return t==='andarbahar'||t.includes('andar');
@@ -219,11 +221,12 @@ function sideTotalsFor(gameType, sides){
 function forceWinner(gameKey, side){
   const all=getLiveRounds();
   const r=all[gameKey]||ensureRound(gameKey);
+  const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000),lock=r.lockSeconds??GAME_TIMINGS[gameKey]?.lock??4;
+  if(!['betting','locked'].includes(r.phase)||elapsed>=(r.duration||GAME_TIMINGS[gameKey]?.duration||30)){toast('Revealing start ho chuki hai — decision lock hai');return}
   r.forcedWinner=side;
-  if(r.phase!=='betting') r.phase='forced';
   all[gameKey]=r;
   setLiveRounds(all);
-  fetch('/api/live-rounds/'+encodeURIComponent(gameKey)+'/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side})}).catch(()=>{});
+  fetch('/api/live-rounds/'+encodeURIComponent(gameKey)+'/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side,roundId:r.roundId})}).then(res=>{if(!res.ok){r.forcedWinner=null;setLiveRounds(all);toast('Decision window closed');render()}}).catch(()=>{});
   toast(gameKey+' → FORCE '+side);
   render();
 }
@@ -1900,13 +1903,15 @@ function adminDecisionCards(){
     {key:'teen-patti',name:'Teen Patti',type:'TEEN PATTI',sides:['Team A','Team B']},
     {key:'dragon-tiger',name:'Dragon Tiger',type:'DRAGON TIGER',sides:['Dragon','Tie','Tiger']}
   ];
-  return defs.map(g=>{
+  return `<div class="controller-game-grid">${defs.map(g=>{
     const r=ensureRound(g.key);
     const totals=sideTotalsFor(g.type,g.sides);
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
+    const maxSide=g.sides.reduce((a,s)=> (totals[s]||0)>(totals[a]||0)?s:a, g.sides[0]);
     const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
     const left=roundSeconds(g.key);
-    return `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:10px">
+    const decisionOpen=['betting','locked'].includes(r.phase)&&elapsed<(r.duration||GAME_TIMINGS[g.key]?.duration||30);
+    return `<div class="controller-game-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="color:#f0c040">${g.name}</strong>
         <span style="font-size:11px;color:#8b949e">Round <b style="color:#58a6ff">${r.roundId||'—'}</b></span>
@@ -1920,8 +1925,8 @@ function adminDecisionCards(){
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
-          const soft=s===minSide&&v>=0;
-          return `<div style="flex:1;min-width:70px;text-align:center;padding:8px;border-radius:6px;background:${soft?'#1a2332':'#161b22'};border:1px solid ${soft?'#388bfd':'#30363d'}">
+          const tone=totals[minSide]!==totals[maxSide]&&s===minSide?'low':totals[minSide]!==totals[maxSide]&&s===maxSide?'high':'equal';
+          return `<div class="controller-side-total ${tone}">
             <div style="font-size:10px;color:#8b949e">${s}</div>
             <div style="font-weight:700;font-size:14px;color:#fff">${v}</div>
           </div>`;
@@ -1929,14 +1934,11 @@ function adminDecisionCards(){
       </div>
       <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Force result (next / current reveal)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-        ${g.sides.map(s=>`<button onclick="forceWinner('${g.key}','${s}')" style="flex:1;min-width:60px;padding:8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:11px;cursor:pointer">${s}</button>`).join('')}
+        ${g.sides.map(s=>`<button ${decisionOpen?'':'disabled'} onclick="forceWinner('${g.key}','${s}')" class="controller-force-btn">${s}</button>`).join('')}
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button onclick="startNewRound('${g.key}',${GAME_TIMINGS[g.key]?.duration||30})" style="padding:7px 10px;background:#238636;border:0;color:#fff;border-radius:4px;font-size:11px;cursor:pointer">Restart ${GAME_TIMINGS[g.key]?.duration||30}s</button>
-        <button onclick="closeRound('${g.key}')" style="padding:7px 10px;background:#da3633;border:0;color:#fff;border-radius:4px;font-size:11px;cursor:pointer">Close Round</button>
-      </div>
+      <div class="controller-auto-note">${decisionOpen?'Decision open until revealing':'Decision locked · game engine automatic'}</div>
     </div>`;
-  }).join('');
+  }).join('')}</div>`;
 }
 function admin(){
   if(!state.adminAuthed){
