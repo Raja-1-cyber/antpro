@@ -918,6 +918,7 @@ function normalizeFirebaseMatch(id, m){
 }
 
 async function fetchLiveCricket(){
+  if(state.liveMatchesLoading)return;
   state.liveMatchesLoading = true;
   state.liveMatchesError = '';
   try{
@@ -1032,8 +1033,8 @@ async function fetchCricketSessions(matchName){
 }
 
 function match(){
-  const list = state.liveMatches.length ? state.liveMatches : (typeof MATCHES!=='undefined'?MATCHES:[]).map((x,i)=>({...x,id:i,home:(x.name||'').split(' v ')[0]||'Team A',away:(x.name||'').split(' v ')[1]||'Team B',homeScore:'—',awayScore:'—',status:x.live?'live':'upcoming',statusText:'',competition:'',time:x.time||''}));
-  const m = list[state.matchId] || list[0] || {name:'Match',home:'Team A',away:'Team B',homeScore:'—',awayScore:'—',live:false,status:'upcoming',statusText:'',competition:'',time:''};
+  const list = state.liveMatches.length ? state.liveMatches : (typeof MATCHES!=='undefined'?MATCHES:[]).map((x,i)=>({...x,id:i,home:(x.name||'').split(' v ')[0]||'Team A',away:(x.name||'').split(' v ')[1]||'Team B',homeScore:'—',awayScore:'—',live:x.live,status:x.live?'live':'upcoming',statusText:'',competition:'',time:x.time||''}));
+  const m = list.find(x=>String(x.id)===String(state.matchId)) || list[Number(state.matchId)] || list[0] || {name:'Match',home:'Team A',away:'Team B',homeScore:'—',awayScore:'—',live:false,status:'upcoming',statusText:'',competition:'',time:''};
   const isLive = m.live || m.status==='live';
   if(state.liveSessionsKey!==m.name&&!state.liveSessionsLoading)fetchCricketSessions(m.name);
   const fallbackSessions = [{name:isLive?'Provider session lines unavailable':'Sessions open when match goes LIVE', not:'—', yes:'—', rate:'—', status:'SUSPENDED'}];
