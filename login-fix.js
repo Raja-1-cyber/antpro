@@ -224,18 +224,6 @@
             } catch (e3) {}
           }
         } catch (netErr) {}
-      } else {
-        try {
-          fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username, password: password, role: expected })
-          }).then(function (r) { return r.json(); }).then(function (result) {
-            if (result && result.token) {
-              try { sessionStorage.setItem('antpro_session_token', result.token); } catch (e) {}
-            }
-          }).catch(function () {});
-        } catch (e4) {}
       }
 
       if (!acc) {

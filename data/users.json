@@ -1,18 +1,113 @@
 {
-  "superMaster": null,
-  "superMasters": {},
+  "superMaster": {
+    "id": "SUPER",
+    "name": "Super Master",
+    "role": "supermaster",
+    "pass": "super123",
+    "chips": 0,
+    "parentMasterId": "MASTER",
+    "status": "active"
+  },
+  "superMasters": {
+    "SUPER": {
+      "id": "SUPER",
+      "name": "Super Master",
+      "role": "supermaster",
+      "pass": "super123",
+      "chips": 0,
+      "parentMasterId": "MASTER",
+      "status": "active"
+    }
+  },
   "masters": {
     "MASTER": {
       "id": "MASTER",
-      "name": "Root Master",
+      "name": "Master One",
       "role": "master",
       "pass": "master123",
-      "chips": 0,
-      "share": 100,
+      "chips": 100000,
+      "commission": 5,
+      "share": 95,
+      "superId": "SUPER",
+      "agents": [
+        "A1001",
+        "A1002"
+      ],
+      "status": "active"
+    },
+    "MASTER2": {
+      "id": "MASTER2",
+      "name": "Master Two",
+      "role": "master",
+      "pass": "master123",
+      "chips": 80000,
+      "commission": 5,
+      "share": 95,
+      "superId": "SUPER",
       "agents": [],
       "status": "active"
     }
   },
-  "agents": {},
-  "players": {}
+  "agents": {
+    "A1001": {
+      "id": "A1001",
+      "name": "Agent-01",
+      "role": "agent",
+      "pass": "agent123",
+      "chips": 50000,
+      "commission": 10,
+      "share": 20,
+      "masterId": "MASTER",
+      "superId": "SUPER",
+      "players": [
+        "P2001",
+        "P2002"
+      ],
+      "status": "active"
+    },
+    "A1002": {
+      "id": "A1002",
+      "name": "Agent-02",
+      "role": "agent",
+      "pass": "agent123",
+      "chips": 25000,
+      "commission": 8,
+      "share": 15,
+      "masterId": "MASTER",
+      "superId": "SUPER",
+      "players": [
+        "P2003"
+      ],
+      "status": "active"
+    }
+  },
+  "players": {
+    "P2001": {
+      "id": "P2001",
+      "name": "Player One",
+      "role": "player",
+      "pass": "play123",
+      "chips": 5000,
+      "agentId": "A1001",
+      "status": "active"
+    },
+    "P2002": {
+      "id": "P2002",
+      "name": "Player Two",
+      "role": "player",
+      "pass": "play123",
+      "chips": 3200,
+      "agentId": "A1001",
+      "status": "active"
+    },
+    "P2003": {
+      "id": "P2003",
+      "name": "Player Three",
+      "role": "player",
+      "pass": "play123",
+      "chips": 1500,
+      "agentId": "A1002",
+      "status": "active"
+    }
+  }
 }
