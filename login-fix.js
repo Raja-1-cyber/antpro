@@ -1,10 +1,10 @@
-/* AntPro login-fix v2 — never stuck, works on new devices */
+/* AntPro login-fix v3 — mobile + laptop */
 (function () {
   'use strict';
   if (typeof state === 'undefined') return;
 
   var DEMO_OTP = '318520';
-  var LOGIN_TIMEOUT_MS = 4000;
+  var LOGIN_TIMEOUT_MS = 5000;
 
   function seedDemoUsers() {
     var data = null;
@@ -19,16 +19,14 @@
     data.players = data.players || {};
     data.superMasters = data.superMasters || {};
 
-    // Only ADD missing — never delete existing accounts
     if (!data.masters.MASTER) {
       data.masters.MASTER = {
         id: 'MASTER', name: 'Root Master', role: 'master',
         pass: 'master123', chips: 0, agents: [], status: 'active', share: 100
       };
     } else if (!data.masters.MASTER.pass) {
-      data.masters.MASTER.pass = data.masters.MASTER.pass || 'master123';
+      data.masters.MASTER.pass = 'master123';
     }
-
     if (!data.superMasters.SM001) {
       data.superMasters.SM001 = {
         id: 'SM001', name: 'Demo SuperMaster', role: 'supermaster',
@@ -49,39 +47,28 @@
         pass: 'play123', chips: 100000, agentId: 'A1001', status: 'active', share: 0
       };
     }
-
     try {
-      if (typeof saveUsers === 'function') {
-        // saveUsers also POSTs server — use local only to avoid loop during login
-        try {
-          var key = typeof USERS_KEY !== 'undefined' ? USERS_KEY : 'antpro_users_v3';
-          // Prefer normalize if available without network
-          if (typeof normalizeHierarchy === 'function') data = normalizeHierarchy(data);
-          localStorage.setItem(key, JSON.stringify(data));
-        } catch (e2) {}
-      } else {
-        localStorage.setItem('antpro_users_v3', JSON.stringify(data));
-      }
+      var key = typeof USERS_KEY !== 'undefined' ? USERS_KEY : 'antpro_users_v3';
+      if (typeof normalizeHierarchy === 'function') data = normalizeHierarchy(data);
+      localStorage.setItem(key, JSON.stringify(data));
     } catch (e3) {}
     return data;
   }
 
   seedDemoUsers();
-  setTimeout(seedDemoUsers, 300);
+  setTimeout(seedDemoUsers, 200);
+  setTimeout(seedDemoUsers, 800);
 
   function localFind(username, password) {
     var id = String(username || '').trim().toUpperCase();
     var p = String(password || '').trim();
     if (!id || !p) return null;
-
-    // Try app findAccount first
     try {
       if (typeof findAccount === 'function') {
         var a = findAccount(username, password);
         if (a && a.id) return a;
       }
     } catch (e) {}
-
     var u = seedDemoUsers();
     function check(dict, role) {
       dict = dict || {};
@@ -126,58 +113,76 @@
     });
   }
 
-  function finishBusy() {
-    state.loginBusy = false;
-    try { if (typeof render === 'function') render(); } catch (e) {}
+  function readLoginFields() {
+    var userEl = document.getElementById('loginUser');
+    var passEl = document.getElementById('loginPass');
+    var otpEl = document.getElementById('loginOtp');
+    // Mobile autofill often skips oninput — read DOM first, then draft
+    var username = '';
+    var password = '';
+    var otp = '';
+    try {
+      if (userEl) username = String(userEl.value || '').trim();
+      if (passEl) password = String(passEl.value || '').trim();
+      if (otpEl) otp = String(otpEl.value || '').trim();
+    } catch (e) {}
+    if (!username && state.loginDraft) username = String(state.loginDraft.user || '').trim();
+    if (!password && state.loginDraft) password = String(state.loginDraft.pass || '').trim();
+    if (!otp && state.loginDraft) otp = String(state.loginDraft.otp || '').trim();
+    // also check any visible password input in login screen
+    if (!password) {
+      try {
+        var all = document.querySelectorAll('.login-screen input[type="password"], input#loginPass');
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].value) { password = String(all[i].value).trim(); break; }
+        }
+      } catch (e2) {}
+    }
+    state.loginDraft = { user: username, pass: password, otp: otp };
+    return { username: username, password: password, otp: otp };
   }
 
   window.doLogin = async function doLogin() {
-    // Force unlock if stuck from previous attempt
+    // CRITICAL for mobile: read fields BEFORE any render() — render destroys inputs
+    var fields = readLoginFields();
+    var username = fields.username;
+    var password = fields.password;
+    var otp = fields.otp;
+
     if (state.loginBusy && state._loginStartedAt && Date.now() - state._loginStartedAt > 6000) {
       state.loginBusy = false;
     }
     if (state.loginBusy) {
-      if (typeof toast === 'function') toast('Login chal raha hai... wait');
+      if (typeof toast === 'function') toast('Login chal raha hai...');
+      return;
+    }
+
+    if (!username || !password) {
+      if (typeof toast === 'function') toast('ID aur password dono likho');
       return;
     }
 
     state.loginBusy = true;
     state._loginStartedAt = Date.now();
-    try { if (typeof render === 'function') render(); } catch (e) {}
+    // Do NOT render here on mobile — keeps keyboard/fields intact until success
 
-    // Safety unlock after 6s no matter what
     var safety = setTimeout(function () {
       if (state.loginBusy) {
         state.loginBusy = false;
         if (typeof toast === 'function') toast('Login timeout — phir try karo');
         try { if (typeof render === 'function') render(); } catch (e) {}
       }
-    }, 6000);
+    }, 7000);
 
     try {
-      var userEl = document.getElementById('loginUser');
-      var passEl = document.getElementById('loginPass');
-      var otpEl = document.getElementById('loginOtp');
-      var username = ((userEl && userEl.value) || (state.loginDraft && state.loginDraft.user) || '').trim();
-      var password = ((passEl && passEl.value) || (state.loginDraft && state.loginDraft.pass) || '').trim();
-      var otp = ((otpEl && otpEl.value) || (state.loginDraft && state.loginDraft.otp) || '').trim();
-      state.loginDraft = { user: username, pass: password, otp: otp };
-
-      if (!username || !password) {
-        clearTimeout(safety);
-        finishBusy();
-        if (typeof toast === 'function') toast('ID aur password dono likho');
-        return;
-      }
-
       var expected = state.loginRole || 'player';
       var acc = null;
       var fromServer = false;
 
-      // 1) LOCAL FIRST (instant — works offline / new device with seeded demos)
+      // LOCAL first (instant)
       acc = localFind(username, password);
 
-      // 2) SERVER (with hard timeout — never hang)
+      // SERVER with timeout
       if (!acc) {
         try {
           var response = await withTimeout(
@@ -195,12 +200,13 @@
             LOGIN_TIMEOUT_MS
           );
           var result = {};
-          try { result = await withTimeout(response.json(), 2000); } catch (e2) { result = {}; }
+          try { result = await withTimeout(response.json(), 2500); } catch (e2) { result = {}; }
           if (response.ok && result.user) {
             acc = result.user;
             fromServer = true;
-            if (result.token) sessionStorage.setItem('antpro_session_token', result.token);
-            // Keep password locally so next find works
+            if (result.token) {
+              try { sessionStorage.setItem('antpro_session_token', result.token); } catch (eT) {}
+            }
             try {
               var store = seedDemoUsers();
               var role = acc.role || expected;
@@ -210,64 +216,63 @@
               localStorage.setItem(typeof USERS_KEY !== 'undefined' ? USERS_KEY : 'antpro_users_v3', JSON.stringify(store));
             } catch (e3) {}
           }
-        } catch (netErr) {
-          // timeout or network — continue with local only
-        }
+        } catch (netErr) {}
       } else {
-        // Still try server in background for token (non-blocking)
         try {
           fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: username, password: password, role: expected })
           }).then(function (r) { return r.json(); }).then(function (result) {
-            if (result && result.token) sessionStorage.setItem('antpro_session_token', result.token);
+            if (result && result.token) {
+              try { sessionStorage.setItem('antpro_session_token', result.token); } catch (e) {}
+            }
           }).catch(function () {});
         } catch (e4) {}
       }
 
       if (!acc) {
         clearTimeout(safety);
-        finishBusy();
-        if (typeof toast === 'function') {
-          toast('Invalid login — ID/password galat ya account is device/server pe nahi');
-        }
+        state.loginBusy = false;
+        if (typeof toast === 'function') toast('Invalid login — ID/password check karo');
+        try { if (typeof render === 'function') render(); } catch (e) {}
         return;
       }
 
-      // Role portal check
       if (acc.role && expected && acc.role !== expected) {
         clearTimeout(safety);
-        finishBusy();
+        state.loginBusy = false;
         var pathMsg = typeof loginPath === 'function' ? loginPath(acc.role) : acc.role;
-        if (typeof toast === 'function') toast('Ye ' + acc.role + ' account hai — ' + pathMsg + ' page se login karo');
+        if (typeof toast === 'function') toast('Ye ' + acc.role + ' account hai — ' + pathMsg + ' page use karo');
+        try { if (typeof render === 'function') render(); } catch (e) {}
         return;
       }
 
-      // Staff OTP
       if (expected !== 'player') {
         if (!otp) {
           clearTimeout(safety);
-          finishBusy();
+          state.loginBusy = false;
           if (typeof toast === 'function') toast('OTP likho — demo: ' + DEMO_OTP);
+          try { if (typeof render === 'function') render(); } catch (e) {}
           return;
         }
         if (otp !== DEMO_OTP) {
           clearTimeout(safety);
-          finishBusy();
-          if (typeof toast === 'function') toast('OTP galat — demo OTP: ' + DEMO_OTP);
+          state.loginBusy = false;
+          if (typeof toast === 'function') toast('OTP galat — demo: ' + DEMO_OTP);
+          try { if (typeof render === 'function') render(); } catch (e) {}
           return;
         }
       }
 
       if (typeof isBlocked === 'function' && isBlocked(acc.id)) {
         clearTimeout(safety);
-        finishBusy();
+        state.loginBusy = false;
         if (typeof toast === 'function') toast('Account blocked');
+        try { if (typeof render === 'function') render(); } catch (e) {}
         return;
       }
 
-      // SUCCESS
       clearTimeout(safety);
       state.user = acc;
       state.loggedIn = true;
@@ -284,32 +289,135 @@
       else { state.view = 'home'; if (typeof render === 'function') render(); }
 
       if (typeof toast === 'function') {
-        toast((acc.role || 'player').toUpperCase() + ' login OK' + (fromServer ? '' : ' (local)'));
+        toast((acc.role || 'player').toUpperCase() + ' login OK');
       }
     } catch (fatal) {
       clearTimeout(safety);
-      finishBusy();
+      state.loginBusy = false;
       if (typeof toast === 'function') toast('Login error — phir try karo');
-      console.error('[AntPro] login error', fatal);
+      console.error('[AntPro] login', fatal);
+      try { if (typeof render === 'function') render(); } catch (e) {}
     }
   };
 
-  // Enter key always works
-  if (!window.__loginKeyBound) {
-    window.__loginKeyBound = true;
+  // Keep loginDraft in sync on every input/change (mobile autofill fires change)
+  if (!window.__loginInputBound) {
+    window.__loginInputBound = true;
+    function syncDraft(e) {
+      var t = e.target;
+      if (!t || !t.id) return;
+      state.loginDraft = state.loginDraft || { user: '', pass: '', otp: '' };
+      if (t.id === 'loginUser') state.loginDraft.user = t.value;
+      if (t.id === 'loginPass') state.loginDraft.pass = t.value;
+      if (t.id === 'loginOtp') state.loginDraft.otp = t.value;
+    }
+    document.addEventListener('input', syncDraft, true);
+    document.addEventListener('change', syncDraft, true);
+    document.addEventListener('blur', syncDraft, true);
+
+    // Touch + click on Login button (mobile Safari)
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t) return;
+      var btn = t.closest ? t.closest('.login-screen button, button.login-submit') : null;
+      if (!btn && t.tagName === 'BUTTON') {
+        var txt = (t.textContent || '').toLowerCase();
+        if (txt.indexOf('login') >= 0 || txt.indexOf('verify otp') >= 0) btn = t;
+      }
+      if (!btn) return;
+      if (state.loggedIn) return;
+      // only when login fields exist
+      if (!document.getElementById('loginUser')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.doLogin === 'function') window.doLogin();
+    }, true);
+
+    document.addEventListener('touchend', function (e) {
+      var t = e.target;
+      if (!t) return;
+      var btn = t.closest ? t.closest('.login-screen button') : null;
+      if (!btn && t.tagName === 'BUTTON') {
+        var txt = (t.textContent || '').toLowerCase();
+        if (txt.indexOf('login') >= 0 || txt.indexOf('verify') >= 0) btn = t;
+      }
+      if (!btn || state.loggedIn) return;
+      if (!document.getElementById('loginUser')) return;
+      // prevent double-fire with click
+      if (btn._loginTouch) return;
+      btn._loginTouch = true;
+      setTimeout(function () { btn._loginTouch = false; }, 500);
+      e.preventDefault();
+      if (typeof window.doLogin === 'function') window.doLogin();
+    }, { passive: false, capture: true });
+
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
       var t = e.target;
       if (!t || !t.id) return;
       if (t.id === 'loginUser' || t.id === 'loginPass' || t.id === 'loginOtp') {
         e.preventDefault();
-        e.stopPropagation();
         if (typeof window.doLogin === 'function') window.doLogin();
       }
     }, true);
   }
 
-  // Auto-unstick loginBusy if page left hanging
+  // Preserve login inputs across accidental re-renders (mobile keyboard)
+  function installLoginRenderGuard() {
+    if (typeof window.render !== 'function' || window.render.__loginGuard) return;
+    var orig = window.render;
+    window.render = function () {
+      var u = document.getElementById('loginUser');
+      var p = document.getElementById('loginPass');
+      var o = document.getElementById('loginOtp');
+      var draft = {
+        user: u ? u.value : (state.loginDraft && state.loginDraft.user) || '',
+        pass: p ? p.value : (state.loginDraft && state.loginDraft.pass) || '',
+        otp: o ? o.value : (state.loginDraft && state.loginDraft.otp) || ''
+      };
+      if (draft.user || draft.pass || draft.otp) state.loginDraft = draft;
+      var activeId = document.activeElement && document.activeElement.id;
+      var out = orig.apply(this, arguments);
+      if (!state.loggedIn && (draft.user || draft.pass)) {
+        var u2 = document.getElementById('loginUser');
+        var p2 = document.getElementById('loginPass');
+        var o2 = document.getElementById('loginOtp');
+        if (u2 && draft.user) u2.value = draft.user;
+        if (p2 && draft.pass) p2.value = draft.pass;
+        if (o2 && draft.otp) o2.value = draft.otp;
+        try {
+          if (activeId) {
+            var el = document.getElementById(activeId);
+            if (el) el.focus();
+          }
+        } catch (e) {}
+      }
+      return out;
+    };
+    window.render.__loginGuard = true;
+  }
+  installLoginRenderGuard();
+  setTimeout(installLoginRenderGuard, 400);
+  setTimeout(installLoginRenderGuard, 1200);
+
+  // Mobile-friendly input attributes after each render
+  setInterval(function () {
+    if (state.loggedIn) return;
+    var u = document.getElementById('loginUser');
+    var p = document.getElementById('loginPass');
+    if (u) {
+      u.setAttribute('autocapitalize', 'off');
+      u.setAttribute('autocorrect', 'off');
+      u.setAttribute('spellcheck', 'false');
+      u.setAttribute('autocomplete', 'username');
+      u.style.fontSize = '16px'; // prevent iOS zoom
+    }
+    if (p) {
+      p.setAttribute('autocomplete', 'current-password');
+      p.style.fontSize = '16px';
+    }
+  }, 1000);
+
   setInterval(function () {
     if (state.loginBusy && state._loginStartedAt && Date.now() - state._loginStartedAt > 8000) {
       state.loginBusy = false;
@@ -317,5 +425,5 @@
     }
   }, 2000);
 
-  console.log('[AntPro] login-fix v2 — no stick | demo P2001/play123 | OTP ' + DEMO_OTP);
+  console.log('[AntPro] login-fix v3 mobile-ready | P2001/play123 | OTP ' + DEMO_OTP);
 })();
