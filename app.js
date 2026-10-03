@@ -1004,7 +1004,7 @@ function inplay(){
       <div class="match-icons"><span>C</span><span>F</span><span>B</span></div>
       <div class="match-info">
         <div class="name">${m.name}</div>
-        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.scoreDisplay&&m.scoreDisplay!=='SCORE PENDING FROM PROVIDER'?m.scoreDisplay+' · ':''}${((!m.live&&m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
+        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.scoreDisplay&&m.scoreDisplay!=='SCORE PENDING FROM PROVIDER'?m.scoreDisplay+' · ':((m.live||m.status==='live')?'score pending from provider · ':'')}${((!m.live&&m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
       </div>
     </div>`).join('')||'<div style="padding:20px;text-align:center;color:#888">No matches right now</div>'}</div>
   <div style="text-align:center;font-size:10px;color:#888;padding:10px">Kisi match pe tap karo → usi match ka scorecard + lines</div>
