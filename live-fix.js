@@ -105,7 +105,7 @@
       '<div class="ab-sides-row"><div class="ab-side"><div class="live-side-label">Andar</div><div class="card-pair">' + (a.length ? a.map(ch).join('') : ch(null) + ch(null)) + '</div></div>' +
       '<div class="ab-side"><div class="live-side-label">Bahar</div><div class="card-pair">' + (b.length ? b.map(ch).join('') : ch(null) + ch(null)) + '</div></div></div></div>' +
       (typeof alwaysGameSpinner === 'function' ? alwaysGameSpinner() : '') + '</div>' +
-      '<div class="bet-locks">' + (typeof stakeControl === 'function' ? stakeControl('andar-bahar') : '') +
+      '<div class="bet-locks">' + (typeof casinoResultBanner === 'function' ? casinoResultBanner('andar-bahar') : '') + (typeof stakeControl === 'function' ? stakeControl('andar-bahar') : '') +
       '<div class="bet-lock-row"><div class="side">Andar</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('andar-bahar','Andar') : 0) + '</div><div class="lock" onclick="playAndarBahar(\'Andar\')">' + (typeof lockLabel === 'function' ? lockLabel('andar-bahar') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('andar-bahar','Bahar') : 0) + '</div><div class="lock" onclick="playAndarBahar(\'Bahar\')">' + (typeof lockLabel === 'function' ? lockLabel('andar-bahar') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go(\'casino\')">BACK</div></div></div>' +
@@ -128,7 +128,7 @@
       '<div class="live-side-label">Team A</div><div class="card-pair">' + (ph.length ? ph.map(ch).join('') : ch(null) + ch(null) + ch(null)) + '</div>' +
       '<div class="live-side-label">Team B</div><div class="card-pair">' + (dh.length ? dh.map(ch).join('') : ch(null) + ch(null) + ch(null)) + '</div></div>' +
       (typeof alwaysGameSpinner === 'function' ? alwaysGameSpinner() : '') + '</div>' +
-      '<div class="bet-locks">' + (typeof stakeControl === 'function' ? stakeControl('teen-patti') : '') +
+      '<div class="bet-locks">' + (typeof casinoResultBanner === 'function' ? casinoResultBanner('teen-patti') : '') + (typeof stakeControl === 'function' ? stakeControl('teen-patti') : '') +
       '<div class="bet-lock-row"><div class="side">Team A</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('teen-patti','Team A') : 0) + '</div><div class="lock" onclick="playTeenPatti(\'Team A\')">' + (typeof lockLabel === 'function' ? lockLabel('teen-patti') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side">Team B</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('teen-patti','Team B') : 0) + '</div><div class="lock" onclick="playTeenPatti(\'Team B\')">' + (typeof lockLabel === 'function' ? lockLabel('teen-patti') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go(\'casino\')">BACK</div></div></div>' +
@@ -171,7 +171,7 @@
   function nextRun(k){runToken[k]=(runToken[k]||0)+1;return runToken[k]}
   function runAlive(k,t){return runToken[k]===t}
   function setR(k,p){var a=all(),r=a[k]||cur(k);Object.keys(p||{}).forEach(function(x){r[x]=p[x]});a[k]=r;save(a);return r}
-  window.gameTop=function(title,round){var map={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'},k=map[title],r=k?cur(k):null,status='LIVE',prev=k&&state.previousResults[k]?state.previousResults[k].winner:'—';if(r&&r.previousResults&&r.previousResults.length){prev=r.previousResults[0];state.previousResults[k]={winner:prev,history:r.previousResults}}if(r){var left=Math.max(0,cfg(k).duration-elapsed(r));status=r.phase==='betting'?'BET '+left+'s':r.phase==='locked'?'LOCKED '+left+'s':String(r.phase||'LIVE').toUpperCase()}return '<div class="game-top"><span class="g-title">'+title+'</span><span class="g-meta">'+status+' · Prev: '+prev+' · Round : '+(round||'—')+'</span></div>'}
+  window.gameTop=function(title,round){return '<div class="game-top"><span class="g-title">'+title+'</span><span>Round ID : '+(round||'—')+'</span></div>'}
   var syncBusy=false;
   window.syncSharedRounds=async function(){if(syncBusy||!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;syncBusy=true;try{var res=await fetch('/api/live-rounds',{cache:'no-store'});if(!res.ok)return;var data=await res.json();state.sharedRounds=data;localStorage.setItem('antpro_live_rounds',JSON.stringify(data));}catch(e){}finally{syncBusy=false}}
   function reset(k,r){if(roundSeen[k]===r.roundId)return;roundSeen[k]=r.roundId;runToken[k]=(runToken[k]||0)+1;state.resolving[k]=false;state.pendingBets=state.pendingBets||{};state.pendingBets[k]=[];if(k==='andar-bahar'){var d=deck();state.abJoker=d.pop()||null;state.andarCards={andar:[],bahar:[]};state.andarSpinning=false}else if(k==='lucky7'){state.l7Card=null;state.l7Spin=false}else if(k==='teen-patti'){state.tpPlayer=[];state.tpDealer=[];state.tpSpin=false}else{state.dtDragon=null;state.dtTiger=null;state.dtSpin=false}}

@@ -837,8 +837,19 @@ function shell(body){
 }
 function topBtn(){return `<button class="menu-btn" onclick="state.menu=true;render()">☰ MAIN MENU</button>`}
 function back(){return `<button class="back-btn" onclick="go('home')">BACK TO MAIN MENU</button>`}
-function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?'BET '+roundSeconds(key)+'s':(r&&r.phase==='locked'?'LOCKED '+roundSeconds(key)+'s':(r?(r.phase||'LIVE').toUpperCase():'LIVE'));return `<div class="game-top"><span class="g-title">${title}</span><span class="game-status">● ${status}</span><span>Round ID : ${round}</span></div>`}
-function alwaysGameSpinner(){return `<div class="game-live-indicator" aria-label="Live game status">● LIVE GAME</div>`}
+function casinoKeyForView(){return ({andar:'andar-bahar',lucky7:'lucky7',teenpatti:'teen-patti',dragontiger:'dragon-tiger'})[state&&state.view]||''}
+function betAmountFor(key,side){
+  const bets=[];
+  (state.activeBets||[]).forEach(b=>bets.push(b));
+  const pending=state.pendingBets&&state.pendingBets[key]||[];pending.forEach(b=>bets.push(b));
+  return bets.filter(b=>(b.gameKey===key||({AndarBahar:'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'})[b.type]===key)&&(b.team||b.side)===side&&(b.status==='open'||b.status==='pending')).reduce((n,b)=>n+(Number(b.amt)||0),0);
+}
+function casinoResultBanner(key){
+  const r=ensureRound(key),winner=r&&r.result||state.previousResults&&state.previousResults[key]&&state.previousResults[key].winner;
+  return `<div class="casino-result-banner" aria-live="polite">${winner?`<b>${escapeHTML(String(winner))} JEETA</b>`:'<span>RESULT YAHAN DIKHEGA</span>'}</div>`;
+}
+function gameTop(title, round, cards){return `<div class="game-top"><span class="g-title">${title}</span><span>Round ID : ${round}</span></div>`}
+function alwaysGameSpinner(){const key=casinoKeyForView(),r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?`BET ${roundSeconds(key)}s`:r&&r.phase==='locked'?`LOCKED ${roundSeconds(key)}s`:r?(r.phase||'LIVE').toUpperCase():'LIVE';return `<div class="game-live-indicator" aria-label="Live game status"><span class="casino-timer">${status}</span><b>● LIVE GAME</b></div>`}
 
 
 /* ===== LOGIN ===== */
@@ -1262,9 +1273,9 @@ function andar(){
       <div class="game-live-cards"><div class="live-side-label">Andar</div><div class="card-pair">${a.length?a.map(cardHTML).join(''):cardHTML(null)+cardHTML(null)}</div><div class="live-side-label">Bahar</div><div class="card-pair">${b.length?b.map(cardHTML).join(''):cardHTML(null)+cardHTML(null)}</div></div>
       ${alwaysGameSpinner()}
     </div>
-    <div class="bet-locks">${stakeControl('andar-bahar')}
-      <div class="bet-lock-row"><div class="side">Andar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar('Andar')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar('Bahar')">🔒</div></div>
+    <div class="bet-locks">${casinoResultBanner('andar-bahar')}${stakeControl('andar-bahar')}
+      <div class="bet-lock-row"><div class="side">Andar</div><div class="amt">${betAmountFor('andar-bahar','Andar')}</div><div class="lock" onclick="playAndarBahar('Andar')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">${betAmountFor('andar-bahar','Bahar')}</div><div class="lock" onclick="playAndarBahar('Bahar')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
     <div class="completed-bets">Completed Casino Bets</div>
@@ -1298,10 +1309,10 @@ function lucky7(){
       <div class="game-live-cards"><div class="live-side-label">Lucky 7</div><div class="card-pair">${cardHTML(c||null)}</div></div>
       ${alwaysGameSpinner()}
     </div>
-    <div class="bet-locks">${stakeControl('lucky7')}
-      <div class="bet-lock-row"><div class="side">7 UP</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7 UP')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">7</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7 DOWN')">🔒</div></div>
+    <div class="bet-locks">${casinoResultBanner('lucky7')}${stakeControl('lucky7')}
+      <div class="bet-lock-row"><div class="side">7 UP</div><div class="amt">${betAmountFor('lucky7','7 UP')}</div><div class="lock" onclick="playLucky7('7 UP')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">7</div><div class="amt">${betAmountFor('lucky7','7')}</div><div class="lock" onclick="playLucky7('7')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">${betAmountFor('lucky7','7 DOWN')}</div><div class="lock" onclick="playLucky7('7 DOWN')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
     <div class="completed-bets">Completed Casino Bets</div>
@@ -1329,10 +1340,10 @@ function teenpatti(){
       <div class="game-live-cards"><div class="live-side-label">Team A</div><div class="card-pair">${ph.length?ph.map(cardHTML).join(''):cardHTML(null)+cardHTML(null)+cardHTML(null)}</div><div class="live-side-label">Team B</div><div class="card-pair">${dh.length?dh.map(cardHTML).join(''):cardHTML(null)+cardHTML(null)+cardHTML(null)}</div></div>
       ${alwaysGameSpinner()}
     </div>
-    <div class="bet-locks">${stakeControl('teen-patti')}
-      <div class="bet-lock-row"><div class="side">Team A</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Team A')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Tie')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Team B')">🔒</div></div>
+    <div class="bet-locks">${casinoResultBanner('teen-patti')}${stakeControl('teen-patti')}
+      <div class="bet-lock-row"><div class="side">Team A</div><div class="amt">${betAmountFor('teen-patti','Team A')}</div><div class="lock" onclick="playTeenPatti('Team A')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">${betAmountFor('teen-patti','Tie')}</div><div class="lock" onclick="playTeenPatti('Tie')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">${betAmountFor('teen-patti','Team B')}</div><div class="lock" onclick="playTeenPatti('Team B')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
     <div class="completed-bets">Completed Casino Bets</div>
@@ -1375,10 +1386,10 @@ function dragontiger(){
       <div class="game-live-cards"><div class="live-side-label">Dragon</div><div class="card-pair">${cardHTML(d||null)}</div><div class="live-side-label">Tiger</div><div class="card-pair">${cardHTML(t||null)}</div></div>
       ${alwaysGameSpinner()}
     </div>
-    <div class="bet-locks">${stakeControl('dragon-tiger')}
-      <div class="bet-lock-row"><div class="side">Dragon</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Dragon')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Tie')">🔒</div></div>
-      <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Tiger')">🔒</div></div>
+    <div class="bet-locks">${casinoResultBanner('dragon-tiger')}${stakeControl('dragon-tiger')}
+      <div class="bet-lock-row"><div class="side">Dragon</div><div class="amt">${betAmountFor('dragon-tiger','Dragon')}</div><div class="lock" onclick="playDragonTiger('Dragon')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">${betAmountFor('dragon-tiger','Tie')}</div><div class="lock" onclick="playDragonTiger('Tie')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">${betAmountFor('dragon-tiger','Tiger')}</div><div class="lock" onclick="playDragonTiger('Tiger')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
     <div class="completed-bets">Completed Casino Bets</div>

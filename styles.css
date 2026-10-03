@@ -252,6 +252,12 @@ body{background:#111;min-height:100vh}
 .bet-lock-row .amt{width:60px;text-align:center;font-size:13px}
 .bet-lock-row .lock{width:50px;text-align:center;padding:8px;background:var(--gold);color:#fff}
 .bet-lock-row .lock.back-btn-g{background:var(--gold)}
+.game-live-indicator{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:8px;color:#9cff9c;font-size:10px;line-height:1.15;text-shadow:0 0 5px #0a0}
+.game-live-indicator .casino-timer{order:-1;color:#ffe566;font-size:14px;font-weight:900;letter-spacing:.3px;text-shadow:0 0 6px #9a8700}
+.casino-result-banner{display:flex;align-items:center;justify-content:center;min-height:28px;padding:5px 8px;background:#080808;color:#ffe566;border-top:1px solid #4d3d00;border-bottom:1px solid #4d3d00;text-align:center;font-size:12px;letter-spacing:.3px}
+.casino-result-banner b{color:#7dff8a;font-size:13px}
+.bet-locks .stake-control{border-top:0}
+.bet-lock-row .amt{color:#ffe566;font-weight:900;font-variant-numeric:tabular-nums}
 .last-result{padding:8px 10px;background:#111;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .last-result .lbl{font-size:10px;color:#aaa;margin-right:4px}
 .result-dot{width:22px;height:22px;border-radius:50%;background:#1a3a6e;color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center}
