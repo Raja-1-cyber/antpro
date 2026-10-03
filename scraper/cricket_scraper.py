@@ -3,15 +3,18 @@
 AntPro Live Cricket + Session Odds Scraper → Firebase Realtime Database
 
 - Fetches live cricket matches (scores, overs, status) from a public feed.
-- Prioritizes India / Indian-team matches for the demo portal.
 - Builds session (fancy) Yes/No style rates for 6 / 10 / 15 / 20 overs.
-- Writes to Firebase every POLL_INTERVAL seconds (default 5s).
+- Writes to Firebase every POLL_INTERVAL seconds (default 5s – 2s is aggressive
+  and will get rate-limited on most free tiers / source sites).
 
 IMPORTANT
 ---------
-1. Demo app only. Real commercial bookmaker “line” pages almost always forbid scraping.
-2. Session odds are *synthetic* (derived from live status + score) so the Firebase
-   shape matches what the frontend expects without violating third-party ToS.
+1. This is intended for the AntPro *demo* app. Real commercial bookmaker
+   “line” pages almost always forbid scraping in their Terms of Service.
+2. Session odds below are *synthetic* (derived from live status + score) so
+   the Firebase shape matches what the frontend expects without violating
+   third-party ToS. Replace `build_sessions()` with your own selectors only
+   if you have legal permission to scrape that specific page.
 3. Never put real money behind scraped data you do not own.
 """
 
@@ -22,6 +25,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
 import signal
 import sys
@@ -57,22 +61,11 @@ USER_AGENT = os.getenv(
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 )
 
-SPORTSCORE_URL = os.getenv(
-    "SPORTSCORE_URL",
-    "https://sportscore.com/api/widget/matches/?sport=cricket&limit=40",
-)
-CRICBUZZ_LIVE = "https://www.cricbuzz.com/cricket-match/live-scores"
+# Public cricket widget used by the existing AntPro server (same source)
+SPORTSCORE_URL = os.getenv("SPORTSCORE_URL", "https://sportscore.com/api/widget/matches/?sport=cricket&limit=30")
 
-# Indian / India-related team name fragments (case-insensitive)
-INDIA_KEYWORDS = (
-    "india", "ind ", " ind", "mumbai", "chennai", "kolkata", "delhi",
-    "bangalore", "bengaluru", "hyderabad", "rajasthan", "punjab",
-    "gujarat", "lucknow", "royal challengers", "sunrisers", "super kings",
-    "knight riders", "capitals", "titans", "super giants", "kings xi",
-    "kings xi punjab", "rcb", "csk", "mi ", " kkr", "dc ", "rr ", "srh",
-    "gt ", "lsg", "pbks", "india a", "india b", "india u19", "india under",
-    "board presidents", "rest of india", "indian", "bcci",
-)
+# Optional: extra public score page (fallback)
+CRICBUZZ_LIVE = "https://www.cricbuzz.com/cricket-match/live-scores"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,6 +96,7 @@ def init_firebase() -> None:
         )
 
     cred_path = FIREBASE_CRED_PATH
+    # Render / Railway: paste full JSON into FIREBASE_CREDENTIALS_JSON env var
     cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON", "").strip()
     if cred_json:
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
@@ -126,17 +120,16 @@ def init_firebase() -> None:
 
 
 def push_to_firebase(payload: dict[str, Any]) -> None:
-    """Write the full live_matches tree in one go."""
+    """Write the full live_matches tree in one go (atomic-ish)."""
     if _db is None:
         init_firebase()
     ref = _db.reference("live_matches")
     ref.set(payload)
+    # also a small heartbeat so the frontend can show “last update”
     _db.reference("meta/scraper").set(
         {
             "last_update": datetime.now(timezone.utc).isoformat(),
             "match_count": len(payload),
-            "live_count": sum(1 for v in payload.values() if v.get("status") == "LIVE"),
-            "india_count": sum(1 for v in payload.values() if v.get("is_india")),
             "poll_interval": POLL_INTERVAL,
         }
     )
@@ -168,66 +161,43 @@ async def fetch_json(session: aiohttp.ClientSession, url: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Match helpers
+# Match ID/status helpers
 # ---------------------------------------------------------------------------
 def is_live_status(value: Any) -> bool:
     status = re.sub(r"[^a-z]", "", str(value or "").lower())
-    return status in {
-        "live", "inplay", "inprogress", "started", "playing",
-        "1stinnings", "2ndinnings", "inningsbreak", "drinks",
-    }
-
-
-def is_india_match(name: str, competition: str = "") -> bool:
-    text = f"{name} {competition}".lower()
-    return any(k in text for k in INDIA_KEYWORDS)
+    return status in {"live","inplay","inprogress","started","playing","1stinnings","2ndinnings"}
 
 
 def make_match_id(name: str) -> str:
+    """Stable short ID from team names."""
     clean = re.sub(r"[^A-Za-z0-9]", "", name.upper())[:24]
     if len(clean) >= 8:
         return clean
     return hashlib.md5(name.encode()).hexdigest()[:12].upper()
 
 
+# ---------------------------------------------------------------------------
+# Session odds builder (synthetic – replace only with licensed data)
+# ---------------------------------------------------------------------------
 def _seeded_noise(key: str, salt: int) -> int:
     h = int(hashlib.md5(f"{key}:{salt}".encode()).hexdigest()[:8], 16)
     return h % 9  # 0-8
 
 
-def extract_runs_wickets_overs(score_str: str) -> tuple[int | None, int | None, float]:
-    """Best-effort parse of score like '145/3 (15.2 Overs)' or '129/5 - 128/6'."""
-    runs = wickets = None
-    overs = 0.0
-    # take first batting score segment
-    part = (score_str or "").split("-")[0].strip()
-    m = re.search(r"(\d+)\s*/\s*(\d+)", part)
-    if m:
-        runs = int(m.group(1))
-        wickets = int(m.group(2))
-    om = re.search(r"\((\d+(?:\.\d+)?)\s*[Oo]vers?\)", score_str or "")
-    if om:
-        overs = float(om.group(1))
-    else:
-        # sometimes time field has overs like "15.2"
-        om2 = re.search(r"\b(\d{1,2}\.\d)\b", score_str or "")
-        if om2:
-            try:
-                overs = float(om2.group(1))
-            except ValueError:
-                pass
-    return runs, wickets, overs
-
-
 def build_sessions(match_name: str, is_live: bool, score_str: str) -> dict[str, Any]:
     """
     Produce the exact shape the frontend expects.
-    Synthetic demo lines that stay stable for a few polls then drift slowly.
+
+    Real bookie “session” markets (6-over / 10-over Yes-No) change every ball.
+    Here we generate plausible demo numbers that stay stable for a few polls
+    so the UI does not flicker, then slowly drift.
     """
     overs_targets = (6, 10, 15, 20)
     sessions: dict[str, Any] = {}
 
-    runs, wickets, current_over = extract_runs_wickets_overs(score_str)
+    # crude current over extraction for status logic
+    over_m = re.search(r"\((\d+(?:\.\d+)?)\s*[Oo]vers?\)", score_str or "")
+    current_over = float(over_m.group(1)) if over_m else 0.0
 
     for target in overs_targets:
         key = f"{target}_over"
@@ -247,14 +217,9 @@ def build_sessions(match_name: str, is_live: bool, score_str: str) -> dict[str, 
             }
             continue
 
-        # base run line ~ 7.2 RPO scaled to target, adjusted by current pace if known
+        # base run line roughly scales with overs left
         base = int(target * 7.2) + _seeded_noise(match_name, target)
-        if runs is not None and current_over > 1:
-            projected = int(runs / current_over * target)
-            # blend projected with base so it feels realistic
-            base = int(0.55 * projected + 0.45 * base)
-
-        yes = max(20, base + _seeded_noise(match_name, target * 3) - 2)
+        yes = base + _seeded_noise(match_name, target * 3)
         no = yes + 1 + (_seeded_noise(match_name, target * 5) % 3)
 
         sessions[key] = {
@@ -280,36 +245,25 @@ async def scrape_sportscore(session: aiohttp.ClientSession) -> list[dict[str, An
         away = (m.get("away") or "?").strip()
         name = f"{home} vs {away}"
         status_raw = (m.get("status") or "").lower()
-        status_text = (m.get("status_text") or m.get("status") or "").lower()
-        is_live = is_live_status(status_raw) or is_live_status(status_text)
-        home_score = m.get("home_score") or "—"
-        away_score = m.get("away_score") or "—"
+        is_live = is_live_status(status_raw) or is_live_status(m.get("status_text"))
+        home_score = m.get("home_score") or m.get("homeScore") or m.get("home_score_text") or "—"
+        away_score = m.get("away_score") or m.get("awayScore") or m.get("away_score_text") or "—"
+        # SportScore sometimes puts overs in status_text / time
+        status_text = m.get("status_text") or m.get("status") or ""
         time_str = m.get("time") or ""
-        competition = m.get("competition") or ""
-
         score = f"{home_score} - {away_score}"
-        if time_str and "over" in str(time_str).lower():
+        if time_str and "over" in time_str.lower():
             score = f"{score} ({time_str})"
 
-        # normalize finished / upcoming labels
-        if is_live:
-            status = "LIVE"
-        elif "finish" in status_raw or "finish" in status_text or status_raw == "ended":
-            status = "FINISHED"
-        else:
-            status = status_raw.upper() or "UPCOMING"
-
         mid = make_match_id(name)
-        india = is_india_match(name, competition)
         out.append(
             {
                 "id": mid,
                 "teams": name,
                 "score": score,
-                "status": status,
+                "status": "LIVE" if is_live else status_raw.upper() or "UPCOMING",
                 "is_live": is_live,
-                "is_india": india,
-                "competition": competition,
+                "competition": m.get("competition") or "",
                 "raw_status": status_raw,
             }
         )
@@ -327,7 +281,8 @@ async def scrape_cricbuzz_fallback(session: aiohttp.ClientSession) -> list[dict[
     soup = BeautifulSoup(html, "lxml")
     out: list[dict[str, Any]] = []
 
-    for card in soup.select(".cb-mtch-lst, .cb-lv-scr-mtch-cst")[:20]:
+    # Cricbuzz structure changes often – this is a best-effort parser
+    for card in soup.select(".cb-mtch-lst, .cb-lv-scr-mtch-cst")[:15]:
         teams_el = card.select(".cb-col-50, .cb-ovr-flo")
         if len(teams_el) < 2:
             continue
@@ -339,7 +294,6 @@ async def scrape_cricbuzz_fallback(session: aiohttp.ClientSession) -> list[dict[
         live_badge = card.select_one(".cb-text-live, .cb-lv-scrs-col .cb-text-live")
         is_live = bool(live_badge)
         mid = make_match_id(name)
-        india = is_india_match(name)
         out.append(
             {
                 "id": mid,
@@ -347,7 +301,6 @@ async def scrape_cricbuzz_fallback(session: aiohttp.ClientSession) -> list[dict[
                 "score": score[:80],
                 "status": "LIVE" if is_live else "UPCOMING",
                 "is_live": is_live,
-                "is_india": india,
                 "competition": "",
                 "raw_status": "live" if is_live else "upcoming",
             }
@@ -367,14 +320,6 @@ async def one_cycle(session: aiohttp.ClientSession) -> dict[str, Any]:
         log.warning("SportScore error: %s – trying Cricbuzz", e)
         matches = await scrape_cricbuzz_fallback(session)
 
-    # Sort: LIVE first, then India matches, then rest
-    def sort_key(m: dict) -> tuple:
-        live_rank = 0 if m.get("is_live") else 1
-        india_rank = 0 if m.get("is_india") else 1
-        return (live_rank, india_rank, m.get("teams", ""))
-
-    matches.sort(key=sort_key)
-
     live_matches: dict[str, Any] = {}
     for m in matches:
         sessions = build_sessions(m["teams"], m["is_live"], m["score"])
@@ -384,7 +329,6 @@ async def one_cycle(session: aiohttp.ClientSession) -> dict[str, Any]:
             "status": m["status"],
             "sessions": sessions,
             "competition": m.get("competition") or "",
-            "is_india": bool(m.get("is_india")),
             "updated_at": int(time.time() * 1000),
         }
 
@@ -397,20 +341,20 @@ async def run_forever() -> None:
     timeout = aiohttp.ClientTimeout(total=20)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        log.info("Scraper started | poll every %.1fs | India priority ON", POLL_INTERVAL)
+        log.info("Scraper started | poll every %.1fs", POLL_INTERVAL)
         while True:
             t0 = time.monotonic()
             try:
                 payload = await one_cycle(session)
                 if payload:
                     push_to_firebase(payload)
-                    live_n = sum(1 for v in payload.values() if v.get("status") == "LIVE")
-                    india_n = sum(1 for v in payload.values() if v.get("is_india"))
+                    live_n = sum(
+                        1 for v in payload.values() if v.get("status") == "LIVE"
+                    )
                     log.info(
-                        "Pushed %d matches (%d LIVE, %d India) to Firebase",
+                        "Pushed %d matches (%d LIVE) to Firebase",
                         len(payload),
                         live_n,
-                        india_n,
                     )
                 else:
                     log.warning("No matches this cycle")
@@ -423,6 +367,7 @@ async def run_forever() -> None:
 
 
 def main() -> None:
+    # graceful shutdown on SIGTERM (Render / Railway)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 

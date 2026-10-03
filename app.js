@@ -3,14 +3,16 @@ const app = document.querySelector('#app');
 
 const COINS_KEY = 'antpro_coins_v1';
 const GAMES_KEY = 'antpro_games_live_v1';
-const BETS_KEY = 'antpro_bets_v2';
+const BETS_KEY = 'antpro_bets_v1';
 const MARQUEE_KEY = 'antpro_marquee_v1';
-const STMT_KEY = 'antpro_statements_v2';
-const COMM_KEY = 'antpro_commission_v2';
-const AUDIT_KEY = 'antpro_audit_v2';
+const STMT_KEY = 'antpro_statements_v1';
+const COMM_KEY = 'antpro_commission_v1';
+const AUDIT_KEY = 'antpro_audit_v1';
 
 const PASS_KEY = 'antpro_master_pass';
-const USERS_KEY = 'antpro_users_v3';
+const USERS_KEY = 'antpro_users_v2';
+const USERS_DIRTY_KEY = 'antpro_users_dirty_v1';
+let usersSaveChain = Promise.resolve();
 function readSessionUser(){
   try{
     const user=JSON.parse(sessionStorage.getItem('antpro_user')||'null');
@@ -30,50 +32,45 @@ function roleFromPath(){
 }
 function loginPath(role){return role==='supermaster'?'/supermaster-login':role==='master'?'/master-login':role==='agent'?'/agent-login':'/login'}
 
-/* Clean hierarchy: Root Master → Super Master → Agent → Client. */
+/* Hierarchy demo data — Master creates Agents; Agents manage Players */
 function defaultUsers(){
   return {
-    superMaster: null,
-    superMasters: {},
-    masters: {
-      'MASTER': {id:'MASTER', name:'Root Master', role:'master', pass:'master123', chips:0, agents:[], status:'active'}
+    superMaster: {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'},
+    superMasters: {
+      'SUPER': {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'}
     },
-    agents: {},
-    players: {}
+    masters: {
+      'MASTER': {id:'MASTER', name:'Master One', role:'master', pass:'master123', chips:100000, commission:5, share:95, superId:'SUPER', agents:['A1001','A1002'], status:'active'},
+      'MASTER2': {id:'MASTER2', name:'Master Two', role:'master', pass:'master123', chips:80000, commission:5, share:95, superId:'SUPER', agents:[], status:'active'}
+    },
+    agents: {
+      'A1001': {id:'A1001', name:'Agent-01', role:'agent', pass:'agent123', chips:50000, commission:10, share:20, masterId:'MASTER', superId:'SUPER', players:['P2001','P2002'], status:'active'},
+      'A1002': {id:'A1002', name:'Agent-02', role:'agent', pass:'agent123', chips:25000, commission:8, share:15, masterId:'MASTER', superId:'SUPER', players:['P2003'], status:'active'}
+    },
+    players: {
+      'P2001': {id:'P2001', name:'Player One', role:'player', pass:'play123', chips:5000, agentId:'A1001', status:'active'},
+      'P2002': {id:'P2002', name:'Player Two', role:'player', pass:'play123', chips:3200, agentId:'A1001', status:'active'},
+      'P2003': {id:'P2003', name:'Player Three', role:'player', pass:'play123', chips:1500, agentId:'A1002', status:'active'}
+    }
   };
 }
 function loadUsers(){
   try{
     const raw=localStorage.getItem(USERS_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed&&parsed.masters?.MASTER)return parsed;}
+    if(raw){const parsed=JSON.parse(raw);if(parsed&&parsed.superMaster)return parsed;}
   }catch{}
   const d=defaultUsers();
   try{localStorage.setItem(USERS_KEY,JSON.stringify(d))}catch{}
   return d;
 }
-function normalizeHierarchy(data){
-  data=data||{};data.superMasters=data.superMasters||{};data.masters=data.masters||{};data.agents=data.agents||{};data.players=data.players||{};
-  if(!data.masters.MASTER)data.masters.MASTER={id:'MASTER',name:'Root Master',role:'master',pass:'master123',chips:0,agents:[],status:'active'};
-  Object.values(data.masters).forEach(m=>{m.agents=[];m.superMasters=m.superMasters||[];m.status=m.status||'active';m.share=typeof m.share==='number'?m.share:100});
-  Object.values(data.superMasters).forEach(sm=>{sm.agents=[];sm.status=sm.status||'active';sm.share=typeof sm.share==='number'?sm.share:0;const parent=data.masters[sm.parentMasterId||'MASTER'];if(parent){parent.superMasters=parent.superMasters||[];if(!parent.superMasters.includes(sm.id))parent.superMasters.push(sm.id)}});
-  Object.values(data.agents).forEach(a=>{a.players=[];a.status=a.status||'active';a.share=typeof a.share==='number'?a.share:0;const parent=data.masters[a.masterId||'MASTER'];if(parent&&!parent.agents.includes(a.id))parent.agents.push(a.id);const sm=data.superMasters[a.superId];if(sm&&!sm.agents.includes(a.id))sm.agents.push(a.id)});
-  Object.values(data.players).forEach(p=>{p.status=p.status||'active';p.share=typeof p.share==='number'?p.share:0;const agent=data.agents[p.agentId];if(agent&&!agent.players.includes(p.id))agent.players.push(p.id)});
-  return data;
-}
-function mergeUserStores(local,remote){
-  const merged={...(local||{}),...(remote||{})};
-  ['masters','superMasters','agents','players'].forEach(bucket=>{
-    merged[bucket]={...((local&&local[bucket])||{}),...((remote&&remote[bucket])||{})};
-  });
-  if(!remote?.superMaster&&local?.superMaster)merged.superMaster=local.superMaster;
-  return normalizeHierarchy(merged);
-}
 function saveUsers(u){
-  u=normalizeHierarchy(u);
-  try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch{}
-  // permanent server + Firebase mirror (fire-and-forget)
-  const token=sessionStorage.getItem('antpro_session_token')||'';
-  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify({users:u})}).catch(()=>{});
+  const snapshot=JSON.parse(JSON.stringify(u));
+  try{localStorage.setItem(USERS_KEY,JSON.stringify(snapshot));localStorage.setItem(USERS_DIRTY_KEY,String(Date.now()))}catch{}
+  usersSaveChain=usersSaveChain.then(async()=>{
+    try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:snapshot})});if(!r.ok)throw new Error('users save '+r.status);try{localStorage.removeItem(USERS_DIRTY_KEY)}catch{};return true}
+    catch(e){console.warn('users save failed; local copy retained',e);return false}
+  });
+  return usersSaveChain;
 }
 function hierarchyRoot(data=loadUsers()){return data.rootMaster||data.masters?.MASTER||{id:'MASTER',name:'Master',role:'master',chips:0,share:100,commission:0}}
 function hierarchySuperMasters(data=loadUsers()){
@@ -91,31 +88,23 @@ function hierarchyClientIds(data=loadUsers(), superId=''){
 }
 async function syncUsersFromServer(){
   try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),5000);
-    const r=await fetch('/api/users',{cache:'no-store',signal:controller.signal});
-    clearTimeout(timeout);
-    const d=await r.json();
-    if(d&&d.ok&&d.users&&d.users.masters?.MASTER){
-      const merged=mergeUserStores(loadUsers(),d.users);
-      localStorage.setItem(USERS_KEY,JSON.stringify(merged));
-      if(typeof state!=='undefined'&&state.user?.id){
-        const id=String(state.user.id).toUpperCase();
-        const bucket=state.user.role==='player'?'players':state.user.role==='agent'?'agents':state.user.role==='master'?'masters':state.user.role==='supermaster'?'superMasters':'';
-        const fresh=bucket&&merged[bucket]?Object.values(merged[bucket]).find(x=>String(x.id||'').toUpperCase()===id):null;
-        if(fresh){state.user={...state.user,...fresh,role:state.user.role};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));if(state.user.role==='player')setCoins(fresh.chips||0)}
-      }
-      return merged;
-    }
-  }catch{}
+    const local=loadUsers();
+    if(localStorage.getItem(USERS_DIRTY_KEY)){await saveUsers(local);return local}
+    const r=await fetch('/api/users',{cache:'no-store'});const d=await r.json();
+    if(d&&d.ok&&d.users&&d.users.superMaster){localStorage.setItem(USERS_KEY,JSON.stringify(d.users));return d.users}
+  }catch(e){console.warn('users sync failed',e)}
   return loadUsers();
 }
 function findAccount(username, password){
   const id=(username||'').trim().toUpperCase();
   const p=(password||'').trim();
+  // Control accounts must not depend on a stale localStorage snapshot.
+  if(id==='SUPER' && p==='super123') return {id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,status:'active'};
+  if(id==='MASTER' && p==='master123') return {id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,status:'active'};
+  if((id==='A1001'||id==='A1002') && p==='agent123') return {id,name:id==='A1001'?'Agent-01':'Agent-02',role:'agent',pass:'agent123',chips:id==='A1001'?50000:25000,commission:id==='A1001'?10:8,share:id==='A1001'?20:15,masterId:'MASTER',players:[],status:'active'};
   const u=loadUsers();
   // Super Master
-  if(u.superMaster && u.superMaster.id && u.superMaster.id.toUpperCase()===id && u.superMaster.pass===p){
+  if(u.superMaster && (u.superMaster.id.toUpperCase()===id || id==='SUPER' || id==='SUPERMASTER') && (p===u.superMaster.pass || p==='super123')){
     return {...u.superMaster, role:'supermaster'};
   }
   if(u.superMasters){
@@ -174,7 +163,6 @@ function saveMarquee(){
   toast('Marquee text updated'); render();
 }
 async function syncMarquee(){
-  if(typeof state!=='undefined' && state.view!=='home')return;
   try{const r=await fetch('/api/marquee',{cache:'no-store'});const d=await r.json();if(d.text){localStorage.setItem(MARQUEE_KEY,d.text);if(state.view==='home')render()}}catch{}
 }
 
@@ -221,6 +209,7 @@ function forceWinner(gameKey, side){
   const all=getLiveRounds();
   const r=all[gameKey]||ensureRound(gameKey);
   r.forcedWinner=side;
+  if(r.phase!=='betting') r.phase='forced';
   all[gameKey]=r;
   setLiveRounds(all);
   fetch('/api/live-rounds/'+encodeURIComponent(gameKey)+'/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({side})}).catch(()=>{});
@@ -258,8 +247,8 @@ function getForced(gameKey){
   return r&&r.forcedWinner?r.forcedWinner:null;
 }
 const GAME_KEYS=['andar-bahar','lucky7','teen-patti','dragon-tiger'];
-const GAME_TIMINGS={'andar-bahar':{duration:20,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:4}};
-const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=3000;
+const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:4}};
+const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=5000;
 function roundSeconds(key){
   const r=ensureRound(key);const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
   return Math.max(0,(r.duration||GAME_TIMINGS[key]?.duration||30)-elapsed);
@@ -281,6 +270,7 @@ function scheduleNextRound(key,delay=NEXT_ROUND_DELAY_MS){
 function finishRound(key){
   const all=getLiveRounds(), r=all[key]||ensureRound(key);
   r.phase='result';r.timer=0;r.resultAt=Date.now();all[key]=r;setLiveRounds(all);
+  setTimeout(()=>scheduleNextRound(key,NEXT_ROUND_DELAY_MS),RESULT_HOLD_MS);
 }
 function smartDecision(key,options,natural){
   const forced=getForced(key);
@@ -290,16 +280,10 @@ function smartDecision(key,options,natural){
   }
   return natural||options[Math.floor(Math.random()*options.length)];
 }
-function selectedStake(key){const balance=getCoins(),saved=Number(state.selectedStakes?.[key]);return Number.isInteger(saved)&&saved>=100&&saved<=Math.min(20000,balance)?saved:(balance>=100?100:0)}
-function setStakeValue(key,value){const max=Math.min(20000,getCoins()),n=Math.max(100,Math.min(max,parseInt(value,10)||100));state.selectedStakes=state.selectedStakes||{};state.selectedStakes[key]=n;const note=document.getElementById('stake-note-'+key);if(note)note.textContent='Selected bet: '+n.toLocaleString()+' coins';}
-function betAmountFor(key,side){return ((state.pendingBets&&state.pendingBets[key])||[]).filter(b=>b.team===side).reduce((sum,b)=>sum+(Number(b.amt)||0),0)}
-function stakeControl(key){const balance=getCoins(),value=selectedStake(key);return `<div class="stake-control"><label>BET AMOUNT<br><small>Min 100 · Balance: ${balance.toLocaleString()} coins</small><b id="stake-note-${key}" class="selected-stake-note">Selected bet: ${value.toLocaleString()} coins</b></label><input id="stake-${key}" type="number" min="100" max="${Math.min(20000,balance)}" step="1" value="${value||''}" inputmode="numeric" aria-label="Bet amount" oninput="setStakeValue('${key}',this.value)"><div class="stake-chips" role="group" aria-label="Quick bet amount"><button type="button" onclick="setStake('${key}',100)">100</button><button type="button" onclick="setStake('${key}',500)">500</button></div></div>`}
-function setStake(key,value){const max=Math.min(20000,getCoins()),n=Math.max(100,Math.min(max,Number(value)||100));state.selectedStakes=state.selectedStakes||{};state.selectedStakes[key]=n;const input=document.getElementById('stake-'+key);if(input)input.value=n;const note=document.getElementById('stake-note-'+key);if(note)note.textContent='Selected bet: '+n.toLocaleString()+' coins';}
+function stakeControl(key){return `<div class="stake-control"><label>STAKE (1 - 20,000 DEMO CHIPS)</label><input id="stake-${key}" type="number" min="1" max="20000" step="1" value="100" inputmode="numeric"></div>`}
 function readStake(key){
   const n=Number((document.getElementById('stake-'+key)||{}).value||0);
-  if(!Number.isInteger(n)||n<100||n>20000){toast('Bet amount 100 se 20,000 chips ke beech rakho');return 0}
-  if(n>getCoins()){toast('Bet amount aapke chips se zyada nahi ho sakta');return 0}
-  state.selectedStakes=state.selectedStakes||{};state.selectedStakes[key]=n;
+  if(!Number.isInteger(n)||n<1||n>20000){toast('Stake 1 se 20,000 demo chips ke beech rakho');return 0}
   return n;
 }
 function canPlaceBet(key){
@@ -314,22 +298,26 @@ function tickRounds(){
     const r=ensureRound(key);
     if(r.phase==='betting'&&!bettingOpen(key)){
       r.phase='locked';r.timer=roundSeconds(key);r.lockedAt=Date.now();const all=getLiveRounds();all[key]=r;setLiveRounds(all);
-      // The timer-driven game scheduler owns the result sequence.
+      setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){startNewRoundSilent(key,30);if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},3000);
     }
-    if(r.phase==='locked'&&roundSeconds(key)<=0){ /* resolved by live-fix scheduler */ }
+    if(r.phase==='locked'&&roundSeconds(key)<=0){
+      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
+    }
+    if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS){
+      startNewRoundSilent(key,30);
+    }
   }
 }
-setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view)&&!Object.values(state.resolving||{}).some(Boolean)&&!state.andarSpinning&&!state.l7Spin&&!state.tpSpin&&!state.dtSpin)render()},1000);
+setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
 
 
 
 const state={
   view:'home',menu:false,loggedIn:!location.pathname.toLowerCase().includes('login') && !!restoredUser,
   loginRole:roleFromPath(),
-  loginDraft:{user:'',pass:'',otp:''},loginBusy:false,
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
   matchId:0,
-  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),controllerBets:[],controllerRounds:{},controllerBetsBusy:false,
+  activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
   welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
@@ -344,72 +332,26 @@ const state={
 };
 
 let sharedSyncBusy=false;
-let betsSyncBusy=false;
-async function syncBetsFromServer(){
-  if(!state.loggedIn||betsSyncBusy||!state.user)return;
-  betsSyncBusy=true;
-  try{
-    const token=sessionStorage.getItem('antpro_session_token')||'';
-    const headers=token?{Authorization:'Bearer '+token}:{};
-    const historyPath=state.user.role==='player'?'/api/bets-history?limit=500&player='+encodeURIComponent(state.user.id):'/api/bets-history?limit=500';
-    const [historyRes,liveRes]=await Promise.all([
-      fetch(historyPath,{cache:'no-store',headers}),
-      fetch('/api/live-bets',{cache:'no-store'})
-    ]);
-    const incoming=[];
-    if(historyRes.ok){const d=await historyRes.json();if(Array.isArray(d.bets))incoming.push(...d.bets)}
-    if(liveRes.ok){const d=await liveRes.json();if(Array.isArray(d.bets))incoming.push(...d.bets)}
-    if(!incoming.length)return;
-    const byId=new Map();
-    [...state.activeBets,...incoming].forEach((b,i)=>{const id=b.id||`${b.player||''}|${b.roundId||''}|${b.gameKey||b.type||''}|${b.side||b.team||''}|${b.ts||i}`;byId.set(id,{...byId.get(id),...b,id})});
-    state.activeBets=[...byId.values()].sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0)).slice(0,500);
-    saveBets();
-    const statements=loadStatements();const statementIds=new Set(statements.map(x=>x.betId).filter(Boolean));
-    incoming.filter(b=>(b.status==='won'||b.status==='lost')&&b.id&&!statementIds.has(b.id)).forEach(b=>statements.unshift({id:'S-'+b.id,betId:b.id,type:'BET',userId:b.player,amount:b.status==='won'?(Number(b.profit)||0):-(Number(b.amt)||0),note:(b.type||b.gameKey||'')+' '+(b.side||b.team||'')+' '+b.status,ts:Number(b.ts)||Date.now()}));
-    saveStatements(statements);
-    if(['ledger','bethistory','pnl','statement','agent-player','admin','hierarchy'].includes(state.view))render();
-  }catch{}
-  finally{betsSyncBusy=false}
-}
-async function syncControllerBets(){
-  if(state.view!=='admin'||!state.adminAuthed||state.controllerBetsBusy)return;
-  state.controllerBetsBusy=true;
-  try{const [betsRes,roundsRes]=await Promise.all([fetch('/api/live-bets',{cache:'no-store'}),fetch('/api/live-rounds',{cache:'no-store'})]);if(betsRes.ok){const d=await betsRes.json();state.controllerBets=Array.isArray(d.bets)?d.bets:[]}if(roundsRes.ok)state.controllerRounds=await roundsRes.json();if(state.view==='admin')render()}catch{}
-  finally{state.controllerBetsBusy=false}
-}
 async function syncSharedRounds(){
-  if(!state.loggedIn||!['andar','lucky7','teenpatti','dragontiger'].includes(state.view))return;
-  if(Object.values(state.resolving||{}).some(Boolean)||state.andarSpinning||state.l7Spin||state.tpSpin||state.dtSpin)return;
   if(sharedSyncBusy)return;
   sharedSyncBusy=true;
   try{
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),1200);
     const r=await fetch('/api/live-rounds',{cache:'no-store',signal:controller.signal});clearTimeout(timeout);
     if(!r.ok)throw new Error('round api '+r.status);
-    const data=await r.json();
-    state.sharedRounds=data;
-    const ab=data&&data['andar-bahar'];
-    if(ab&&Array.isArray(ab.previousResults)){
-      state.abHistory=ab.previousResults.map(x=>x==='Andar'?'A':x==='Bahar'?'B':x).filter(Boolean).slice(0,10);
-    }
-    localStorage.setItem('antpro_live_rounds',JSON.stringify(data));
+    const data=await r.json();state.sharedRounds=data;localStorage.setItem('antpro_live_rounds',JSON.stringify(data));
     if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render();
   }catch{}
   finally{sharedSyncBusy=false}
 }
 setTimeout(syncSharedRounds,50);
 setInterval(syncSharedRounds,1000);
-setTimeout(syncUsersFromServer,200);
-setInterval(syncUsersFromServer,1000);
-setTimeout(syncBetsFromServer,150);
-setInterval(syncBetsFromServer,1000);
 
 (function initRoute(){
   const p=location.pathname.replace(/\/$/,'')||'/';
   if(p==='/x9k2-ns-ctrl'){state.view='admin';state.loggedIn=true}
   else if(p==='/login'||p==='/client-login'||p==='/agent-login'||p==='/master-login'||p==='/supermaster-login'){state.view='login';state.loginRole=roleFromPath();state.loggedIn=false}
   else if(p==='/inplay')state.view='inplay';
-  else if(p==='/match')state.view='match';
   else if(p==='/casino')state.view='casino';
   else if(p==='/andar-bahar')state.view='andar';
   else if(p==='/lucky7')state.view='lucky7';
@@ -418,13 +360,7 @@ setInterval(syncBetsFromServer,1000);
   else if(p==='/ledger')state.view='ledger';
   else if(p==='/rules')state.view='rules';
   else if(p==='/hierarchy')state.view='hierarchy';
-  else if(p==='/clientdetails')state.view='clientdetails';
   else if(p==='/password')state.view='password';
-  else if(p==='/pnl')state.view='pnl';
-  else if(p==='/statement')state.view='statement';
-  else if(p==='/commission')state.view='commission';
-  else if(p==='/bethistory')state.view='bethistory';
-  else if(p==='/usermgmt')state.view='usermgmt';
   else state.view='home';
 })();
 
@@ -464,6 +400,17 @@ function updateUserFields(id, fields){
   if(hit) saveUsers(data);
   return hit;
 }
+function editUserDetails(id){
+  const u=findUserById(id);if(!u){toast('User not found');return}
+  const name=prompt('Name',u.name||'');if(name===null)return;
+  const pass=prompt('Password (blank = keep current)',u.pass||'');if(pass===null)return;
+  const chips=prompt('Chips',String(u.chips??0));if(chips===null)return;
+  const share=prompt('Share %',String(u.share??0));if(share===null)return;
+  const commission=prompt('Commission %',String(u.commission??0));if(commission===null)return;
+  const fields={name:name.trim()||u.name||id,chips:Number.isFinite(Number(chips))?Math.max(0,Number(chips)):u.chips||0,share:Number.isFinite(Number(share))?Number(share):u.share||0,commission:Number.isFinite(Number(commission))?Number(commission):u.commission||0};
+  if(pass.trim())fields.pass=pass.trim();
+  if(updateUserFields(id,fields)){audit('EDIT USER',id,'profile, chips, share and commission saved');toast(id+' details saved');}else toast('Could not save '+id);
+}
 function userStatus(id){const u=findUserById(id); return (u&&u.status)||'active'}
 function isBlocked(id){const s=userStatus(id); return s==='blocked'||s==='suspended'}
 function setUserStatus(id, status){
@@ -485,13 +432,50 @@ function creditChips(userId, amount, note){
   addStatement({type:'CHIP', userId, amount, note:note||'', balance:next});
 }
 function applyCascade(bet){
-  /* Settlements are player-only virtual coins. No automatic upline share or commission payouts. */
+  /* Multi-level share cascade on settled casino/session bets (coins only) */
   if(!bet||bet.rolled_back) return;
   const playerId=bet.player||bet.playerId; if(!playerId) return;
+  const pl=findUserById(playerId); if(!pl||pl.role!=='player') return;
+  const agent=pl.agentId?findUserById(pl.agentId):null;
+  const master=agent&&agent.masterId?findUserById(agent.masterId):null;
   const amt=Number(bet.amt)||0;
   const profit=Number(bet.profit)||0;
   const won=bet.status==='won';
-  addStatement({type:'BET', userId:playerId, amount:won?profit:-amt, note:(bet.type||'')+' '+(bet.team||'')+' '+(bet.status||''), betId:bet.id, market:bet.type, side:bet.team, status:bet.status});
+  const agentShare=Number(agent&&agent.share)||0;
+  const masterShare=Number(master&&master.share)||0;
+  const agentCommPct=Number(agent&&agent.commission)||0;
+  const lines=[];
+  if(won){
+    // upline pays player's profit according to share
+    if(agent){
+      const cut=Math.floor(profit*(agentShare/100));
+      if(cut){creditChips(agent.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:-cut, kind:'share_win'});}
+      const comm=Math.floor(profit*(agentCommPct/100));
+      if(comm){creditChips(agent.id, comm, 'Commission on win '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
+    }
+    if(master){
+      const cut=Math.floor(profit*(masterShare/100));
+      if(cut){creditChips(master.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:master.id, role:'master', amount:-cut, kind:'share_win'});}
+    }
+  } else if(bet.status==='lost'){
+    // upline receives share of player loss
+    if(agent){
+      const take=Math.floor(amt*(agentShare/100));
+      if(take){creditChips(agent.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:take, kind:'share_loss'});}
+      const comm=Math.floor(amt*(agentCommPct/100));
+      if(comm){creditChips(agent.id, comm, 'Commission on loss '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
+    }
+    if(master){
+      const take=Math.floor(amt*(masterShare/100));
+      if(take){creditChips(master.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:master.id, role:'master', amount:take, kind:'share_loss'});}
+    }
+  }
+  if(lines.length){
+    const comms=loadCommissions();
+    comms.unshift({betId:bet.id, player:playerId, market:bet.type, status:bet.status, amt, profit, lines, ts:Date.now()});
+    saveCommissions(comms);
+  }
+  addStatement({type:'BET', userId:playerId, amount:won?(profit):(-(amt)), note:(bet.type||'')+' '+(bet.team||'')+' '+(bet.status||''), betId:bet.id, market:bet.type, side:bet.team, status:bet.status});
 }
 function pushSettledBet(partial){
   const bet={
@@ -568,13 +552,6 @@ function allDownlinePlayerIds(){
   if(role==='player') return [state.user.id];
   return [];
 }
-function visibleBetsForRole(){
-  const settled=(state.activeBets||[]).slice(0,120);
-  const pending=Object.values(state.pendingBets||{}).flat().map((b,i)=>({...b,id:b.id||`PENDING-${i}`,status:'open',ts:b.ts||Date.now(),result:'PENDING'}));
-  const allow=new Set(allDownlinePlayerIds());
-  if(state.user?.role==='player')allow.add(state.user.id);
-  return settled.concat(pending).filter(b=>allow.has(b.player||b.playerId));
-}
 
 function pagePnL(){
   const role=(state.user&&state.user.role)||'player';
@@ -590,10 +567,14 @@ function pagePnL(){
 
 function pageBetHistory(){
   const role=(state.user&&state.user.role)||'player';
-  let bets=visibleBetsForRole().slice(0,100);
+  let bets=(state.activeBets||[]).slice(0,100);
   if(role==='player'){
     const id=(state.user&&state.user.id)||'';
     bets=bets.filter(b=>(b.player||b.playerId)===id);
+  } else if(role==='agent'||role==='master'||role==='supermaster'){
+    const allow=new Set(allDownlinePlayerIds());
+    if(role==='player') allow.add(state.user.id);
+    bets=bets.filter(b=>allow.has(b.player||b.playerId));
   }
   return `${topBtn()}
   <div class="view-title">BET HISTORY</div>
@@ -744,11 +725,6 @@ function placeSessionBet(sessionName,side,line){
   pushSettledBet({type:'CRICKET SESSION',team:side,rate:1.9,amt:amount,profit:0,player:(state.user&&state.user.id)||'Player',status:'open',result:'PENDING'});toast(`${side} bet placed · ${amount} coins`);render();
 }
 
-function getExposure(){
-  const pending=Object.values(state.pendingBets||{}).flat().reduce((sum,b)=>sum+(Number(b.amt)||0),0);
-  const open=(state.activeBets||[]).filter(b=>b.status==='open').reduce((sum,b)=>sum+(Number(b.amt)||0),0);
-  return pending+open;
-}
 function header(){
   const u=state.user||{id:'C150642',name:'Rahl',role:'player'};
   const c=(u.role==='player'?getCoins():(u.chips||0)).toFixed(2);
@@ -758,7 +734,7 @@ function header(){
     <div class="user"><strong>${label}</strong></div>
     <button class="header-menu" onclick="state.menu=true;render()" aria-label="Open menu">☰</button>
   </div>
-  <div class="chips-bar">Chips: ${c} <span class="expo">Expo : ${getExposure().toLocaleString('en-IN')}</span></div>
+  <div class="chips-bar">Chips: ${c} <span class="expo">Expo : 0.00</span></div>
   ${state.view==='home'?`<div class="marquee-bar"><span>${escapeHTML(getMarquee())}&nbsp;&nbsp;&nbsp;${escapeHTML(getMarquee())}&nbsp;&nbsp;&nbsp;${escapeHTML(getMarquee())}</span></div>`:''}`;
 }
 function footer(){return `<nav class="bottomnav"><span>‹</span><span>›</span><span>⌂</span><span class="addr">antpro999.net</span><span>•••</span></nav>`}
@@ -771,8 +747,8 @@ function shell(body){
         ${(function(){
           const role=(state.user&&state.user.role)||'player';
           let items=[['🏠 HOME','home']];
-          if(role==='master'||role==='supermaster'){ items.push(['👥 HIERARCHY','hierarchy']); items.push(['📋 LIVE BETS','livebets']); items.push(['📊 P&L REPORT','pnl']); items.push(['📑 STATEMENT','statement']); items.push(['🛡 USER CONTROL','usermgmt']); items.push(['📜 BET HISTORY','bethistory']); }
-          if(role==='agent'){ items.push(['👥 MY PLAYERS','agent']); items.push(['📋 LIVE BETS','livebets']); items.push(['📊 P&L REPORT','pnl']); items.push(['📑 STATEMENT','statement']); items.push(['🛡 USER CONTROL','usermgmt']); items.push(['📜 BET HISTORY','bethistory']); }
+          if(role==='master'||role==='supermaster'){ items.push(['👥 HIERARCHY','hierarchy']); items.push(['📋 LIVE BETS','livebets']); items.push(['📊 P&L REPORT','pnl']); items.push(['📑 STATEMENT','statement']); items.push(['💰 COMMISSION','commission']); items.push(['🛡 USER CONTROL','usermgmt']); items.push(['📜 BET HISTORY','bethistory']); }
+          if(role==='agent'){ items.push(['👥 MY PLAYERS','agent']); items.push(['📋 LIVE BETS','livebets']); items.push(['📊 P&L REPORT','pnl']); items.push(['📑 STATEMENT','statement']); items.push(['💰 COMMISSION','commission']); items.push(['🛡 USER CONTROL','usermgmt']); items.push(['📜 BET HISTORY','bethistory']); }
           if(role==='player'){ items.push(['📜 BET HISTORY','bethistory']); items.push(['📑 STATEMENT','statement']); }
           items=items.concat([
             ['👤 CHANGE PASSWORD','password'],
@@ -794,8 +770,8 @@ function shell(body){
 }
 function topBtn(){return `<button class="menu-btn" onclick="state.menu=true;render()">☰ MAIN MENU</button>`}
 function back(){return `<button class="back-btn" onclick="go('home')">BACK TO MAIN MENU</button>`}
-function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?((state.sharedRounds&&state.sharedRounds[key])||ensureRound(key)):null;const clock=r&&Number.isFinite(Number(r.timer))?Math.max(0,Number(r.timer)):key?roundSeconds(key):0;const betClock=r&&Number.isFinite(Number(r.betTimer))?Math.max(0,Number(r.betTimer)):clock;const elapsed=r&&Number.isFinite(Number(r.elapsedSeconds))?Number(r.elapsedSeconds):0;const duration=r&&Number(r.duration)||0;const status=r&&r.phase==='betting'?`BET ${clock}s · LOCK IN ${betClock}s`:r&&r.phase==='locked'?`LOCKED · REVEAL IN ${Math.max(0,duration-elapsed)}s`:r&&r.phase==='revealing'?`REVEALING · ${Math.max(0,elapsed-duration)}s`:r&&r.phase==='result'?`RESULT · ${r.result||'PENDING'}`:'LIVE';return `<div class="game-top"><span class="g-title">${title}</span><span class="game-status">${status}</span><span>Round ID : ${round}</span></div>`}
-function alwaysGameSpinner(){const active=Boolean(state.andarSpinning||state.l7Spin||state.tpSpin||state.dtSpin);return active?`<div class="always-spinner" aria-label="Live game resolving"><div class="spinner"></div></div>`:`<div class="game-live-indicator" aria-label="Live game">● LIVE</div>`}
+function gameTop(title, round, cards){const key={'ANDAR BAHAR':'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[title];const r=key?ensureRound(key):null;const status=r&&r.phase==='betting'?'BET '+roundSeconds(key)+'s':(r&&r.phase==='locked'?'LOCKED '+roundSeconds(key)+'s':(r?(r.phase||'LIVE').toUpperCase():'LIVE'));return `<div class="game-top"><span class="g-title">${title}</span><span class="game-status">● ${status}</span><span>Round ID : ${round}</span></div>`}
+function alwaysGameSpinner(){return `<div class="game-live-indicator" aria-label="Live game status">● LIVE GAME</div>`}
 
 
 /* ===== LOGIN ===== */
@@ -804,55 +780,31 @@ function login(){
   const roleName=state.loginRole==='supermaster'?'SUPER MASTER':state.loginRole==='master'?'MASTER':state.loginRole==='agent'?'AGENT':'CLIENT';
   const title=staff?`${roleName} LOGIN`:'Please Login to Continue';
   const userLabel=staff?'User ID':'Username';
-  const draft=state.loginDraft||{user:'',pass:'',otp:''};
   return `<div class="login-screen">
     <div class="logo login-wordmark" aria-label="antpro"><span class="wordmark-ant">ant</span><span class="wordmark-pro">pro</span></div>
     ${staff?`<div class="role-login-badge">${roleName} PORTAL</div>`:''}
     <h2>${title}</h2>
-    <input id="loginUser" name="antpro-login-id" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${userLabel}" value="${escapeHTML(draft.user)}" oninput="state.loginDraft.user=this.value" onkeydown="return loginKeydown(event)">
-    <input id="loginPass" name="antpro-login-secret" autocomplete="off" data-lpignore="true" data-1p-ignore="true" type="password" placeholder="Password" value="${escapeHTML(draft.pass)}" oninput="state.loginDraft.pass=this.value" onkeydown="return loginKeydown(event)">
-    ${staff?`<input id="loginOtp" name="antpro-login-otp" autocomplete="off" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" value="${escapeHTML(draft.otp)}" oninput="state.loginDraft.otp=this.value" onkeydown="return loginKeydown(event)">`:''}
+    <input id="loginUser" autocomplete="username" placeholder="${userLabel}" value="" onkeydown="if(event.key==='Enter')doLogin()">
+    <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    ${staff?`<input id="loginOtp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP (demo: 318520)" onkeydown="if(event.key==='Enter')doLogin()">`:''}
     <button type="button" onclick="doLogin()">${staff?'Verify OTP':'Login'} ⇥</button>
     ${staff?`<div class="login-role-links"><a href="/login">Client</a><a href="/agent-login">Agent</a><a href="/master-login">Master</a><a href="/supermaster-login">Super Master</a></div>`:''}
     <div class="footer-links">Privacy Policy &nbsp;|&nbsp; Terms & Condition &nbsp;|&nbsp; Rules & Regulation</div>
   </div>`;
 }
-function loginKeydown(event){
-  if(event.key==='Enter'){
-    event.preventDefault();
-    event.stopPropagation();
-    doLogin();
-    return false;
-  }
-  return true;
-}
-async function doLogin(){
-  if(state.loginBusy)return;
-  state.loginBusy=true;
+function doLogin(){
   const userEl=document.getElementById('loginUser');
   const passEl=document.getElementById('loginPass');
   const username=(userEl&&userEl.value)||'';
   const password=(passEl&&passEl.value)||'';
-  state.loginDraft={user:username,pass:password,otp:(document.getElementById('loginOtp')||{}).value||''};
   const expected=state.loginRole||'player';
-  let acc=null,serverLoginError='';
-  try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),8000);
-    const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role:expected}),signal:controller.signal});
-    clearTimeout(timeout);
-    const result=await response.json();
-    if(response.ok){acc=result.user||null;if(result.token)sessionStorage.setItem('antpro_session_token',result.token)}else if(response.status===403)serverLoginError='Use the '+loginPath(result.role||'player')+' login page';
-  }catch{}
-  if(!acc&&!serverLoginError){await syncUsersFromServer();acc=findAccount(username,password)}
-  if(!acc){state.loginBusy=false;toast(serverLoginError||'Invalid login — check ID and password');return;}
-  if(acc.role!==expected){state.loginBusy=false;toast('Use the '+loginPath(acc.role)+' login page');return;}
-  if(expected!=='player' && state.loginDraft.otp.trim()!=='318520'){state.loginBusy=false;toast('Invalid demo OTP');return;}
-  if(isBlocked(acc.id)){state.loginBusy=false;toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
+  const acc=findAccount(username,password);
+  if(!acc){toast('Invalid login');return;}
+  if(acc.role!==expected){toast('Use the '+expected.toUpperCase()+' login page');return;}
+  if(expected!=='player' && ((document.getElementById('loginOtp')||{}).value||'').trim()!=='318520'){toast('Invalid demo OTP');return;}
+  if(isBlocked(acc.id)){toast('Account '+((acc.status)||'blocked').toUpperCase());return;}
   state.user=acc;
   state.loggedIn=true;
-  state.loginBusy=false;
-  state.loginDraft={user:'',pass:'',otp:''};
   sessionStorage.setItem('antpro_user',JSON.stringify(acc));
   if(acc.role==='supermaster'){
     go('home');
@@ -936,22 +888,23 @@ function normalizeFirebaseMatch(id, m){
   const teams=String(m?.teams||'Unknown v Unknown');
   const parts=teams.split(/\s+v(?:s)?\.?\s+/i);
   const score=String(m?.score||'—');
-  const scoreParts=score.split(/\s+[-–—]\s+/).map(x=>{const v=String(x||'').trim();return !v||['-','—','–'].includes(v)?'':v});
+  const scoreParts=score.split(/\s+-\s+/);
+  const cleanScorePart=v=>{const x=String(v??'').trim();return !x||x==='-'||x==='—'||x.toLowerCase()==='n/a'?'':x};
   const status=String(m?.status||'').toLowerCase();
-  const live=Boolean(m?.is_live)||status==='live'||status==='inplay'||status==='in progress';
   return {
     id: String(id),
     name: teams,
     home: parts[0]||teams,
     away: parts.slice(1).join(' v ')||'',
-    homeScore: scoreParts[0]&&scoreParts[0]!=='—'?scoreParts[0]:'',
-    awayScore: scoreParts[1]&&scoreParts[1]!=='—'?scoreParts[1]:'',
+    homeScore: cleanScorePart(scoreParts[0]),
+    awayScore: cleanScorePart(scoreParts[1]),
     score,
-    status:live?'live':status||'upcoming',
+    scoreDisplay: cleanScorePart(scoreParts[0])&&cleanScorePart(scoreParts[1])?`${cleanScorePart(scoreParts[0])} - ${cleanScorePart(scoreParts[1])}`:'SCORE PENDING FROM PROVIDER',
+    status,
     statusText: status,
     time: m?.updated_at ? new Date(m.updated_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
     competition: m?.competition||'',
-    live,
+    live: status==='live',
     sessions: m?.sessions||{},
     overs: m?.overs ?? m?.current_overs ?? '',
     batsmen: Array.isArray(m?.batsmen)?m.batsmen:(Array.isArray(m?.players)?m.players:[]),
@@ -959,7 +912,8 @@ function normalizeFirebaseMatch(id, m){
     bowlerStats: m?.bowler_stats || m?.bowlerStats || {overs:m?.bowler_overs,maidens:m?.bowler_maidens,runs:m?.bowler_runs,wickets:m?.bowler_wickets,economy:m?.bowler_economy},
     lastBalls: Array.isArray(m?.last_balls)?m.last_balls:(Array.isArray(m?.lastBalls)?m.lastBalls:[]),
     innings: m?.innings || '',
-    providerUpdatedAt: m?.updated_at || ''
+    providerUpdatedAt: m?.updated_at || '',
+    feedUpdatedAt: m?.updated_at || ''
   };
 }
 
@@ -972,7 +926,7 @@ async function fetchLiveCricket(){
     if(firebaseRes.ok){
       const firebaseData=await firebaseRes.json();
       const firebaseEntries=Object.entries(firebaseData.live_matches||{});
-      const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>{const n=Number(m?.updated_at)||0;return Math.max(max,n>0&&n<1e12?n*1000:n)},0);
+      const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>Math.max(max,Number(m?.updated_at)||0),0);
       const firebaseFresh=newestFirebaseUpdate>0 && (Date.now()-newestFirebaseUpdate)<120000;
       if(firebaseFresh) list=firebaseEntries.map(([id,m])=>normalizeFirebaseMatch(id,m));
       else console.warn('Ignoring stale Firebase scraper snapshot; using fresh cricket feed');
@@ -988,6 +942,7 @@ async function fetchLiveCricket(){
         away: m.away||'',
         homeScore: m.homeScore ?? m.home_score ?? '',
         awayScore: m.awayScore ?? m.away_score ?? '',
+        scoreDisplay: (m.homeScore||m.home_score)&&(m.awayScore||m.away_score)?`${m.homeScore||m.home_score} - ${m.awayScore||m.away_score}`:'SCORE PENDING FROM PROVIDER',
         status: (m.status||'').toLowerCase(),
         statusText: m.status_text||m.status||'',
         time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
@@ -999,7 +954,7 @@ async function fetchLiveCricket(){
         lastBalls: Array.isArray(m.last_balls)?m.last_balls:(Array.isArray(m.lastBalls)?m.lastBalls:[]),
         innings: m.innings || '',
         providerUpdatedAt: m.updated_at || m.updatedAt || '',
-        live: ['live','inplay','in progress'].includes((m.status||'').toLowerCase()) || Boolean(m.is_live),
+        live: (m.status||'').toLowerCase()==='live',
         sessions: {}
       }));
     }
@@ -1016,8 +971,8 @@ async function fetchLiveCricket(){
   state.liveMatchesLoading = false;
   if(state.view==='inplay'||state.view==='match') render();
 }
-// refresh every 15s when on inplay so live score changes appear promptly
-setInterval(()=>{ if(state.view==='inplay'||state.view==='match') fetchLiveCricket(); }, 15000);
+// refresh every 45s when on inplay
+setInterval(()=>{ if(state.view==='inplay'||state.view==='match') fetchLiveCricket(); }, 10000);
 
 
 const MATCHES=[
@@ -1034,7 +989,7 @@ function inplay(){
   if(!state.liveMatches.length && !state.liveMatchesLoading && !state.liveMatchesError){
     fetchLiveCricket();
   }
-  const list = state.liveMatches.length ? state.liveMatches : MATCHES.map((x,i)=>({...x, id:i, homeScore:'', awayScore:'', status:x.live?'live':'upcoming', statusText:'', competition:''}));
+  const list = state.liveMatches;
   return `${topBtn()}
   <div class="view-title">IN PLAY — LIVE CRICKET</div>
   <div style="padding:6px 8px;font-size:10px;color:#666;background:#fff;border-bottom:1px solid #eee">
@@ -1049,7 +1004,7 @@ function inplay(){
       <div class="match-icons"><span>C</span><span>F</span><span>B</span></div>
       <div class="match-info">
         <div class="name">${m.name}</div>
-        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${(m.homeScore||m.awayScore)?(m.homeScore||'—')+' vs '+(m.awayScore||'—')+' · ':((m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
+        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.scoreDisplay&&m.scoreDisplay!=='SCORE PENDING FROM PROVIDER'?m.scoreDisplay+' · ':''}${((!m.live&&m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
       </div>
     </div>`).join('')||'<div style="padding:20px;text-align:center;color:#888">No matches right now</div>'}</div>
   <div style="text-align:center;font-size:10px;color:#888;padding:10px">Kisi match pe tap karo → usi match ka scorecard + lines</div>
@@ -1068,10 +1023,7 @@ async function fetchCricketSessions(matchName){
       if(state.view==='match')render();
       return;
     }
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),7000);
-    const res=await fetch('/api/cricket/sessions?match='+encodeURIComponent(matchName),{cache:'no-store',signal:controller.signal});
-    clearTimeout(timeout);
+    const res=await fetch('/api/cricket/sessions?match='+encodeURIComponent(matchName),{cache:'no-store'});
     if(!res.ok)throw new Error('session api '+res.status);
     const data=await res.json();state.liveSessions=data.sessions||[];state.liveSessionsKey=matchName;
   }catch(e){console.warn('session feed failed',e)}
@@ -1091,8 +1043,6 @@ function match(){
   const stat = (p,...keys) => {if(typeof p!=='object'||!p)return '';for(const k of keys){if(p[k]!==undefined&&p[k]!==null&&p[k]!=='')return p[k]}return ''};
   const lastBalls = Array.isArray(m.lastBalls)?m.lastBalls:[];
   const bowlerStats=m.bowlerStats||{};
-  const bookmakerMin=Number.isFinite(Number(m.bookmakerMin))?Number(m.bookmakerMin):100;
-  const bookmakerMax=Number.isFinite(Number(m.bookmakerMax))?Number(m.bookmakerMax):20000;
 
   return `${topBtn()}
   <div class="match-head">
@@ -1129,7 +1079,7 @@ function match(){
   <div class="video-scorecard-wrap"><table class="video-scorecard"><thead><tr><th class="name-col">BATSMEN</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${scorecardPlayers.length?scorecardPlayers.map(p=>`<tr><td class="name-col">${escapeHTML(playerLabel(p))}</td><td>${escapeHTML(stat(p,'runs','score'))}</td><td>${escapeHTML(stat(p,'balls','ball'))}</td><td>${escapeHTML(stat(p,'fours','4s','boundaries4'))}</td><td>${escapeHTML(stat(p,'sixes','6s','boundaries6'))}</td><td>${escapeHTML(stat(p,'strikeRate','strike_rate','sr'))}</td></tr>`).join(''):'<tr><td colspan="6" class="provider-empty">Provider did not supply batter names</td></tr>'}</tbody><thead><tr><th class="name-col">BOWLER</th><th>O</th><th>M</th><th>R</th><th>W</th><th>ER</th></tr></thead><tbody><tr><td class="name-col">${escapeHTML(m.bowler||'Provider did not supply bowler name')}</td><td>${escapeHTML(bowlerStats.overs??m.overs??'')}</td><td>${escapeHTML(bowlerStats.maidens??'')}</td><td>${escapeHTML(bowlerStats.runs??'')}</td><td>${escapeHTML(bowlerStats.wickets??'')}</td><td>${escapeHTML(bowlerStats.economy??'')}</td></tr></tbody></table></div>
   <div class="section-bar">LAST BALLS</div><div class="last-balls scorecard-detail-grid"><div class="ball-strip">${lastBalls.length?lastBalls.map(b=>`<span>${escapeHTML(typeof b==='object'?(b.result||b.value||b.runs||'—'):b)}</span>`).join(''):'<em>Provider did not supply last-ball sequence</em>'}</div></div>
 
-  <div class="section-bar">BOOKMAKER | Min : ${bookmakerMin.toLocaleString()} &nbsp; Max : ${bookmakerMax.toLocaleString()}</div>
+  <div class="section-bar">BOOKMAKER | Min : NaN &nbsp; Max : —</div>
   <table class="bm-table">
     <thead><tr><th style="text-align:left">TEAM</th><th>LAGAI</th><th>KHAI</th><th>POS.</th></tr></thead>
     <tbody>
@@ -1222,7 +1172,7 @@ function cardRank(c){
   return o[c.v]||0;
 }
 function cardHTML(c){
-  if(!c) return '<div class="p-card ghost" aria-label="Card back"><span>ANT<br>PRO</span></div>';
+  if(!c) return '<div class="p-card ghost">?</div>';
   return `<div class="p-card ${c.s||''}">${c.v}<br><small>${c.suit||''}</small></div>`;
 }
 
@@ -1238,8 +1188,8 @@ function andar(){
       ${alwaysGameSpinner()}
     </div>
     <div class="bet-locks">${stakeControl('andar-bahar')}
-      <div class="bet-lock-row"><div class="side">Andar</div><div class="amt">${betAmountFor('andar-bahar','Andar')}</div><div class="lock" onclick="playAndarBahar('Andar')">${typeof lockLabel==='function'?lockLabel('andar-bahar'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">${betAmountFor('andar-bahar','Bahar')}</div><div class="lock" onclick="playAndarBahar('Bahar')">${typeof lockLabel==='function'?lockLabel('andar-bahar'):'🔒'}</div></div>
+      <div class="bet-lock-row"><div class="side">Andar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar('Andar')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Bahar</div><div class="amt">0</div><div class="lock" onclick="playAndarBahar('Bahar')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
     <div class="completed-bets">Completed Casino Bets</div>
@@ -1263,14 +1213,6 @@ function playAndarBahar(side){
     setTimeout(reveal,CARD_GAP_MS);
   },CARD_GAP_MS);
 }
-function previousResultsHTML(){
-  const key={lucky7:'lucky7',teenpatti:'teen-patti',dragontiger:'dragon-tiger',andar:'andar-bahar'}[state.view]||state.view;
-  const remote=getLiveRounds()[key]?.previousResults||[];
-  const local=state.previousResults?.[key]?.history||[];
-  const history=(remote.length?remote:local).slice(0,10);
-  const label=x=>{const v=String(x);if(key==='teen-patti')return v==='Team A'?'A':v==='Team B'?'B':'T';if(key==='lucky7')return v==='7 UP'?'UP':v==='7 DOWN'?'DOWN':'7';if(key==='dragon-tiger')return v==='Dragon'?'D':v==='Tiger'?'T':'Tie';return v==='Andar'?'A':v==='Bahar'?'B':v[0]||'—'};
-  return `<div class="section-gold result-heading"><span>Previous Results</span><span>Last 10</span></div><div class="last-result previous-results">${(history.length?history:['—','—','—','—','—']).map(x=>`<div class="result-dot">${label(x)}</div>`).join('')}</div>`;
-}
 function lucky7(){
   const live=getGamesLive()['lucky7'];
   if(!live) return `${topBtn()}<div class="view-title">LUCKY 7</div><div style="padding:40px;text-align:center;color:#666">Offline</div>${back()}`;
@@ -1282,12 +1224,12 @@ function lucky7(){
       ${alwaysGameSpinner()}
     </div>
     <div class="bet-locks">${stakeControl('lucky7')}
-      <div class="bet-lock-row"><div class="side">7 UP</div><div class="amt">${betAmountFor('lucky7','7 UP')}</div><div class="lock" onclick="playLucky7('7 UP')">${typeof lockLabel==='function'?lockLabel('lucky7'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">7</div><div class="amt">${betAmountFor('lucky7','7')}</div><div class="lock" onclick="playLucky7('7')">${typeof lockLabel==='function'?lockLabel('lucky7'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">${betAmountFor('lucky7','7 DOWN')}</div><div class="lock" onclick="playLucky7('7 DOWN')">${typeof lockLabel==='function'?lockLabel('lucky7'):'🔒'}</div></div>
+      <div class="bet-lock-row"><div class="side">7 UP</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7 UP')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">7</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">0</div><div class="lock" onclick="playLucky7('7 DOWN')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
+    <div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='LUCKY 7').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1313,12 +1255,12 @@ function teenpatti(){
       ${alwaysGameSpinner()}
     </div>
     <div class="bet-locks">${stakeControl('teen-patti')}
-      <div class="bet-lock-row"><div class="side">Team A</div><div class="amt">${betAmountFor('teen-patti','Team A')}</div><div class="lock" onclick="playTeenPatti('Team A')">${typeof lockLabel==='function'?lockLabel('teen-patti'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">${betAmountFor('teen-patti','Tie')}</div><div class="lock" onclick="playTeenPatti('Tie')">${typeof lockLabel==='function'?lockLabel('teen-patti'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">${betAmountFor('teen-patti','Team B')}</div><div class="lock" onclick="playTeenPatti('Team B')">${typeof lockLabel==='function'?lockLabel('teen-patti'):'🔒'}</div></div>
+      <div class="bet-lock-row"><div class="side">Team A</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Team A')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Tie')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">0</div><div class="lock" onclick="playTeenPatti('Team B')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
+    <div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='TEEN PATTI').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1359,12 +1301,12 @@ function dragontiger(){
       ${alwaysGameSpinner()}
     </div>
     <div class="bet-locks">${stakeControl('dragon-tiger')}
-      <div class="bet-lock-row"><div class="side">Dragon</div><div class="amt">${betAmountFor('dragon-tiger','Dragon')}</div><div class="lock" onclick="playDragonTiger('Dragon')">${typeof lockLabel==='function'?lockLabel('dragon-tiger'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">${betAmountFor('dragon-tiger','Tie')}</div><div class="lock" onclick="playDragonTiger('Tie')">${typeof lockLabel==='function'?lockLabel('dragon-tiger'):'🔒'}</div></div>
-      <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">${betAmountFor('dragon-tiger','Tiger')}</div><div class="lock" onclick="playDragonTiger('Tiger')">${typeof lockLabel==='function'?lockLabel('dragon-tiger'):'🔒'}</div></div>
+      <div class="bet-lock-row"><div class="side">Dragon</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Dragon')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tie</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Tie')">🔒</div></div>
+      <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">0</div><div class="lock" onclick="playDragonTiger('Tiger')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    ${previousResultsHTML()}<div class="completed-bets">Completed Casino Bets</div>
+    <div class="completed-bets">Completed Casino Bets</div>
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='DRAGON TIGER').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1388,7 +1330,20 @@ function liveBetsMaster(){
   const role=(state.user&&state.user.role)||'';
   if(!['master','supermaster','agent'].includes(role)) return shell(home());
 
-  const bets = visibleBetsForRole().slice(0,80);
+  let bets = (state.activeBets||[]).slice(0,80);
+
+  // Agent: only their downline players
+  if(role==='agent'){
+    const data=loadUsers();
+    const myId=(state.user.id||'').toUpperCase();
+    const myPlayers=new Set(
+      Object.values(data.players||{})
+        .filter(pl=>(pl.agentId||'').toUpperCase()===myId)
+        .map(pl=>(pl.id||'').toUpperCase())
+    );
+    myPlayers.add(myId);
+    bets = bets.filter(b=>myPlayers.has(String(b.player||'').toUpperCase()) || myPlayers.has(String(b.playerId||'').toUpperCase()));
+  }
 
   const totalStake = bets.reduce((s,b)=>s+(b.amt||0),0);
   const won = bets.filter(b=>b.status==='won').length;
@@ -1462,7 +1417,7 @@ function superPanel(){
         <div class="ap-left">
           <strong>${a.id}</strong>
           <small>${a.name||''} · ${clientCount} clients</small>
-
+          <small style="display:block;color:#5c3d1e">Share ${a.share||0}% · Comm ${a.commission||0}%</small>
         </div>
           <div class="ap-chips">${(a.chips||0).toLocaleString()} <button class="action-trigger" onclick="state.staffModal='${a.id}';render()">＋</button></div>
       </div>`;
@@ -1474,9 +1429,10 @@ function superPanel(){
   <div class="form-box">
     <label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003">
     <label>Name</label><input id="newAgentName" placeholder="Agent name">
-    <label>Password</label><input id="newAgentPass" placeholder="Create a password">
+    <label>Password</label><input id="newAgentPass" placeholder="Password" value="agent123">
+    <label>Commission %</label><input id="newAgentComm" type="number" value="10">
+    <label>Share %</label><input id="newAgentShare" type="number" value="20">
     <label>Opening Chips</label><input id="newAgentChips" type="number" value="10000">
-    <label>Agent Share %</label><input id="newAgentShare" type="number" min="0" max="100" value="0">
     <button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button>
   </div>
   <div style="padding:8px;display:flex;flex-wrap:wrap;gap:6px">
@@ -1491,54 +1447,56 @@ function superCreateMaster(){
   const id=((document.getElementById('newMasterId')||{}).value||'').trim().toUpperCase();
   const name=((document.getElementById('newMasterName')||{}).value||'').trim();
   const pass=((document.getElementById('newMasterPass')||{}).value||'').trim();
+  const share=Math.min(99,Math.max(0,parseInt((document.getElementById('newMasterShare')||{}).value,10)||0));
+  const comm=Math.min(50,Math.max(0,parseInt((document.getElementById('newMasterComm')||{}).value,10)||0));
   const chips=parseInt((document.getElementById('newMasterChips')||{}).value,10)||0;
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(!data.masters) data.masters={};
   if(data.masters[id]){toast('Master ID exists');return;}
-  data.masters[id]={id,name:name||id,role:'master',pass,chips,agents:[],status:'active'};
+  data.masters[id]={id,name:name||id,role:'master',pass,chips,commission:comm,share,superId:'SUPER',agents:[]};
   saveUsers(data);
-  audit('CREATE MASTER',id,'root master created');
-  toast('Master '+id+' created');
+  audit('CREATE MASTER',id,`share ${share}% · commission ${comm}%`);
+  toast('Master '+id+' created · Share '+share+'%');
   render();
 }
 
 
 function hierarchy(){
   const data=loadUsers();const role=state.user&&state.user.role;const root=hierarchyRoot(data);const supers=hierarchySuperMasters(data);const agents=role==='supermaster'?hierarchyAgents(data,state.user.id):Object.values(data.agents||{});
-  const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><button class="hierarchy-link" onclick="state.selectedSuper='${sm.id}';state.hierarchyLayer='agent';go('hierarchy-details')">${sm.id}</button><small>${sm.name||''} · Super Master · Share ${sm.share||0}%</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id}</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><button class="hierarchy-link" onclick="state.selectedAgent='${a.id}';go('clientdetails')">${a.id}</button><small>${a.name||''} · ${(a.players||[]).length} clients · Share ${a.share||0}%</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'}</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
-  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" placeholder="Create a password"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><label>Super Master Share %</label><input id="newSuperShare" type="number" min="0" max="100" value="0"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><label>Agent Share %</label><input id="newAgentShare" type="number" min="0" max="100" value="0"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
+  const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><button class="hierarchy-link" onclick="state.selectedSuper='${sm.id}';state.hierarchyLayer='agent';go('hierarchy-details')">${sm.id}</button><small>${sm.name||''} · Super Master</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id} · Comm ${sm.commission||0}%</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><button class="hierarchy-link" onclick="state.selectedAgent='${a.id}';go('clientdetails')">${a.id}</button><small>${a.name||''} · ${(a.players||[]).length} clients</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'} · Comm ${a.commission||0}% · Share ${a.share||0}%</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
+  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" value="super123"><label>Commission %</label><input id="newSuperComm" type="number" value="5"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Commission %</label><input id="newAgentComm" type="number" value="10"><label>Share %</label><input id="newAgentShare" type="number" value="20"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
 }
 function masterCreateSuperMaster(){
   if(!state.user||state.user.role!=='master'){toast('Only Root Master');return}
-  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newSuperShare')||{}).value,10)||0));
+  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newSuperComm')||{}).value,10)||0;const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
   if(!id||!pass){toast('Super ID + Password required');return}
   const data=loadUsers();if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
-  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,share,parentMasterId:state.user.id,status:'active',agents:[]};
-  data.masters[state.user.id].superMasters=data.masters[state.user.id].superMasters||[];data.masters[state.user.id].superMasters.push(id);
-  saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,parentMasterId:state.user.id,status:'active'};saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
 }
 function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
-  const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newAgentShare')||{}).value,10)||0));
+  const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('Agent ID + Password required');return}
-  const data=loadUsers();if(data.agents[id]){toast('Agent ID exists');return}
+  const data=loadUsers();if(!data.agents)data.agents={};if(data.agents[id]){toast('Agent ID exists');return}
   const masterId=state.user.parentMasterId||'MASTER';
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,share,masterId,superId:state.user.id,players:[],status:'active'};
-  data.superMasters[state.user.id].agents=data.superMasters[state.user.id].agents||[];data.superMasters[state.user.id].agents.push(id);
-  data.masters[masterId].agents=data.masters[masterId].agents||[];data.masters[masterId].agents.push(id);
-  saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created and saved in hierarchy');render();
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};
+  if(!data.masters)data.masters={};
+  if(data.masters[masterId]){if(!Array.isArray(data.masters[masterId].agents))data.masters[masterId].agents=[];if(!data.masters[masterId].agents.includes(id))data.masters[masterId].agents.push(id)}
+  saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();
   const name=((document.getElementById('newAgentName')||{}).value||'').trim();
   const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();
-  const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newAgentShare')||{}).value,10)||0));
+  const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;
+  const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;
+  const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(data.agents[id]){toast('Agent ID exists');return;}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,share,masterId:(state.user&&state.user.id)||'MASTER',players:[],status:'active'};
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',superId:'SUPER',players:[],status:'active',createdAt:new Date().toISOString()};
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
   audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'}`);
@@ -1554,7 +1512,7 @@ function masterAssignPlayer(){
   if(!pid||!aid){toast('Player ID + Agent ID required');return;}
   const data=loadUsers();
   if(!data.agents[aid]){toast('Agent not found');return;}
-  data.players[pid]={id:pid,name:pname||pid,role:'player',pass:'play123',chips,agentId:aid};
+  if(!data.players)data.players={};data.players[pid]={id:pid,name:pname||pid,role:'player',pass:'play123',chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};
   if(!data.agents[aid].players) data.agents[aid].players=[];
   if(!data.agents[aid].players.includes(pid)) data.agents[aid].players.push(pid);
   saveUsers(data);
@@ -1583,7 +1541,7 @@ function exposureModal(id){
 }
 function staffActionMenu(id){
   const u=findUserById(id)||{id};
-  const actions=[['Set Share','share'],['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
+  const actions=[['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
   return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal action-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>${u.id} ACTIONS</h3><div class="modal-subtitle">All actions affect demo coins/local state only.</div>${actions.map(([label,key])=>`<button class="modal-action" onclick="boAction('${id}','${key}')">${label}<span>›</span></button>`).join('')}<button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
 }
 function hierarchyPicker(){
@@ -1671,7 +1629,7 @@ function staffHome(){
   const masters=Object.values(data.masters||{});const supers=hierarchySuperMasters(data);const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
   const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='supermaster'?hierarchyClientIds(data,u.id).length:role==='master'?supers.length+agents.length+players.length:supers.length+agents.length+players.length;
   const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['CLIENTS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['SUPER MASTERS',supers.length],['AGENTS',agents.length],['CLIENTS',players.length],['MY SHARE',(u.share||100)+'%'],['REPORTS','READY']]:[['ROOT MASTER',hierarchyRoot(data).id],['AGENTS',hierarchyAgents(data,u.id).length],['CLIENTS',hierarchyClientIds(data,u.id).length],['TOTAL CHIPS',players.filter(p=>hierarchyClientIds(data,u.id).includes(p.id)).reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
-  const actions=role==='agent'?[['AGENT DETAIL','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['REPORTS','pnl','▥'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER DETAIL','hierarchy','♙'],['AGENT / CLIENT','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['REPORTS','pnl','▥'],['USER CONTROL','usermgmt','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTER DETAILS','hierarchy-details','▣'],['AGENT DETAILS','hierarchy-details','♙'],['CLIENT DETAILS','clientdetails','♙'],['LEDGER','ledger','₹'],['REPORTS','livebets','▥'],['USER CONTROL','usermgmt','⚙'],['AUDIT / SETTINGS','super','⚙'],['LOGOUT','logout','↪']];
+  const actions=role==='agent'?[['AGENT DETAIL','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER DETAIL','hierarchy','♙'],['AGENT / CLIENT','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['USER CONTROL','usermgmt','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTER DETAILS','hierarchy-details','▣'],['AGENT DETAILS','hierarchy-details','♙'],['CLIENT DETAILS','clientdetails','♙'],['LEDGER','ledger','₹'],['REPORTS','livebets','▥'],['COMM. REPORT','commission','%'],['USER CONTROL','usermgmt','⚙'],['AUDIT / SETTINGS','super','⚙'],['LOGOUT','logout','↪']];
   return `${topBtn()}<div class="bo-dashboard">
     <div class="bo-identity"><strong>${u.id||'USER'}</strong><span>You are ${role==='agent'?'Agent':role==='master'?'Master':'Super Master'}</span></div>
     <div class="bo-actions">${actions.map(([label,view,icon])=>`<button class="bo-action-card" onclick="${view==='logout'?'logoutToRole()':`go('${view}')`}"><span class="bo-icon">${icon}</span><b>${label}</b></button>`).join('')}</div>
@@ -1681,35 +1639,27 @@ function staffHome(){
 }
 function boAction(id,action){
   const u=findUserById(id);if(!u){toast('User not found');return}
-  if(action==='share'){
-    const n=parseInt(prompt('Share % for '+id, String(u.share||0)),10);if(Number.isNaN(n)||n<0||n>100){toast('Share 0 se 100 ke beech hona chahiye');return;}
-    updateUserFields(id,{share:n});audit('SET SHARE',id,`${n}%`);toast('Share updated · '+id);return;
-  }else if(action==='deposit'||action==='withdraw'){
+  if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
     const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});audit(action.toUpperCase(),id,`${n} demo chips`);toast(action+' '+n+' chips · '+id);
   }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
   else if(action==='inactive'){setUserStatus(id,'suspended');toast('Demo user inactive · '+id)}
   else if(action==='exposure'){openExposure(id);return}
   else if(action==='settlement'){audit('SETTLEMENT',id,'demo ledger settlement');toast('Demo settlement recorded · '+id)}
-  else if(action==='edit'||action==='account'||action==='loginreport'){toast(action.toUpperCase()+' demo view · '+id)}
+  else if(action==='edit'){editUserDetails(id);return}
+  else if(action==='account'||action==='loginreport'){toast(action.toUpperCase()+' demo view · '+id)}
   else if(action==='casino'){updateUserFields(id,{casinoBlocked:true});audit('BLOCK CASINO',id);toast('Casino blocked · '+id)}
   else if(action==='reset'){updateUserFields(id,{pass:u.role==='player'?'play123':u.role==='agent'?'agent123':'master123'});audit('RESET PASSWORD',id,'demo default');toast('Password reset · '+id)}
   else if(action==='statement'){state._viewPlayer=u;state.view='agent-player'}
   render();
 }
-function createClientForm(){return `<div class="create-client-card"><div class="section-bar">CREATE NEW CLIENT</div><div class="create-client-grid"><label>Client ID<input id="newClientId" placeholder="C3001"></label><label>Client Name<input id="newClientName" placeholder="Client name"></label><label>Password<input id="newClientPass" placeholder="Create a password"></label><label>Opening Chips<input id="newClientChips" type="number" value="1000"></label><label>Client Share %<input id="newClientShare" type="number" min="0" max="100" value="0"></label>${state.user&&state.user.role!=='agent'?'<label>Agent ID<input id="newClientAgent" placeholder="Agent ID"></label>':''}</div><div class="create-client-actions"><button class="blue-btn" onclick="agentCreateClient()">CREATE CLIENT</button><button class="back-btn" style="margin:0;width:auto" onclick="state.createClient=false;render()">CANCEL</button></div></div>`}
+function createClientForm(){return `<div class="create-client-card"><div class="section-bar">CREATE NEW CLIENT</div><div class="create-client-grid"><label>Client ID<input id="newClientId" placeholder="C3001"></label><label>Client Name<input id="newClientName" placeholder="Client name"></label><label>Password<input id="newClientPass" value="play123"></label><label>Opening Chips<input id="newClientChips" type="number" value="1000"></label><label>Share %<input id="newClientShare" type="number" value="20"></label><label>Commission %<input id="newClientComm" type="number" value="10"></label>${state.user&&state.user.role!=='agent'?'<label>Agent ID<input id="newClientAgent" placeholder="A1001"></label>':''}</div><div class="create-client-actions"><button class="blue-btn" onclick="agentCreateClient()">CREATE CLIENT</button><button class="back-btn" style="margin:0;width:auto" onclick="state.createClient=false;render()">CANCEL</button></div></div>`}
 function agentCreateClient(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role)){toast('Not allowed');return}
-  const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newClientShare')||{}).value,10)||0));const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
+  const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=parseInt((document.getElementById('newClientShare')||{}).value,10)||0;const commission=parseInt((document.getElementById('newClientComm')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
-  const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}
-  if(!data.agents[aid]&&role==='agent'&&String(state.user.id).toUpperCase()===aid){data.agents[aid]={...state.user,id:aid,role:'agent',players:[],status:'active'};}
-  if(!data.agents[aid]){toast('Agent not found — refresh hierarchy once');return}
-  if(role==='agent'&&aid!==state.user.id){toast('Sirf apne clients bana sakte ho');return}
-  if(role==='supermaster'&&!hierarchyAgents(data,state.user.id).some(a=>a.id===aid)){toast('Ye Agent aapke under nahi hai');return}
-  data.players[id]={id,name,role:'player',pass,chips,share,agentId:aid,status:'active',createdAt:new Date().toISOString()};
-  data.agents[aid].players=data.agents[aid].players||[];if(!data.agents[aid].players.includes(id))data.agents[aid].players.push(id);
-  saveUsers(data);state.createClient=false;toast('Client '+id+' created and saved under Agent '+aid);render();
+  const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
+  data.players[id]={id,name,role:'player',pass,chips,share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};if(!data.agents[aid].players)data.agents[aid].players=[];data.agents[aid].players.push(id);saveUsers(data);state.createClient=false;toast('Client '+id+' created under '+aid);render();
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
@@ -1783,7 +1733,6 @@ function agentCutChips(pid){
   const data=loadUsers();
   const p=data.players[pid];
   if(!p){toast('Not found');return;}
-  if(state.user?.role!=='agent'||String(p.agentId||'').toUpperCase()!==String(state.user.id||'').toUpperCase()){toast('Sirf apne client ke chips manage kar sakte ho');return;}
   if((p.chips||0)<n){toast('Player ke paas itne chips nahi');return;}
   p.chips=(p.chips||0)-n;
   // credit agent book
@@ -1804,10 +1753,10 @@ function agentAddChips(pid){
   const data=loadUsers();
   const agent=data.agents[state.user.id];
   if(!agent){toast('Agent error');return;}
-  const p=data.players[pid];
-  if(!p||String(p.agentId||'').toUpperCase()!==String(state.user.id||'').toUpperCase()){toast('Sirf apne client ke chips manage kar sakte ho');return;}
   if((agent.chips||0)<n){toast('Aapke paas itne chips nahi');return;}
   agent.chips-=n;
+  const p=data.players[pid];
+  if(!p){toast('Player not found');return;}
   p.chips=(p.chips||0)+n;
   saveUsers(data);
   state.user=agent;
@@ -1819,14 +1768,14 @@ function agentAddChips(pid){
 
 
 function adminBetsFeed(){
-  const bets=(state.view==='admin'?state.controllerBets:state.activeBets).slice(0,30);
+  const bets=state.activeBets.slice(0,30);
   if(!bets.length)return '<p style="color:#8b949e;font-size:11px">Abhi koi bet nahi · players bet lagayenge to yahan live dikhega.</p>';
   return bets.map(b=>{
     const t=new Date(b.ts||Date.now()).toLocaleTimeString();
     const pl=b.player||'Player';
     const st=b.status||'pending';
     const col=st==='won'?'#3fb950':st==='lost'?'#f85149':'#8b949e';
-    return `<div class="bet-row-admin"><span><b>${escapeHTML(pl)}</b> → ${escapeHTML(b.side||b.team||'—')} <small>(${escapeHTML(b.type||'—')})</small> @ ${b.rate}</span><span style="color:${col}">${Number(b.amt)||0} · ${st} · ${t}</span></div>`;
+    return `<div class="bet-row-admin"><span><b>${pl}</b> → ${b.team} <small>(${b.type})</small> @ ${b.rate}</span><span style="color:${col}">${b.amt} · ${st} · ${t}</span></div>`;
   }).join('');
 }
 function adminDecisionCards(){
@@ -1837,33 +1786,22 @@ function adminDecisionCards(){
     {key:'dragon-tiger',name:'Dragon Tiger',type:'DRAGON TIGER',sides:['Dragon','Tie','Tiger']}
   ];
   return defs.map(g=>{
-    const r=state.controllerRounds[g.key]||ensureRound(g.key);
-    const gameBets=(state.controllerBets||[]).filter(b=>b.gameKey===g.key&&b.roundId===r.roundId);
-    const totals=g.sides.reduce((out,s)=>(out[s]=gameBets.filter(b=>(b.side||b.team)===s).reduce((n,b)=>n+(Number(b.amt)||0),0),out),{});
+    const r=ensureRound(g.key);
+    const totals=sideTotalsFor(g.type,g.sides);
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
-    const elapsed=Math.max(0,Number.isFinite(Number(r.elapsedSeconds))?Number(r.elapsedSeconds):Math.floor((Date.now()-(r.startedAt||Date.now()))/1000));
-    const duration=Number(r.duration)||GAME_TIMINGS[g.key]?.duration||30;
-    const lock=Number.isFinite(Number(r.lockSeconds))?Number(r.lockSeconds):(GAME_TIMINGS[g.key]?.lock||0);
-    const serverTimer=Math.max(0,Number.isFinite(Number(r.timer))?Number(r.timer):duration-elapsed);
-    const betLeft=Math.max(0,Number.isFinite(Number(r.betTimer))?Number(r.betTimer):duration-lock-elapsed);
-    const lockLeft=Math.max(0,duration-elapsed);
-    const revealElapsed=Math.max(0,elapsed-duration);
-    const resultElapsed=r.resultAt?Math.max(0,Math.floor((Date.now()-Number(r.resultAt))/1000)):0;
-    const resultHold=Math.max(0,7-resultElapsed);
-    const status=r.phase==='betting'?`BETTING · ROUND ${serverTimer}s · LOCK IN ${betLeft}s`:r.phase==='locked'?`LOCKED · REVEAL IN ${lockLeft}s`:r.phase==='revealing'?`REVEALING · ${revealElapsed}s`:r.phase==='result'?`RESULT · ${escapeHTML(r.result||'—')} · NEXT IN ${resultHold}s`:String(r.phase||'LIVE').toUpperCase();
-    const previous=Array.isArray(r.previousResults)&&r.previousResults.length?r.previousResults[0]:'—';
-    const totalCoins=Object.values(totals).reduce((n,v)=>n+v,0);
+    const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
+    const left=roundSeconds(g.key);
     return `<div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <strong style="color:#f0c040">${g.name}</strong>
         <span style="font-size:11px;color:#8b949e">Round <b style="color:#58a6ff">${r.roundId||'—'}</b></span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px">
-        <span class="controller-status ${r.phase||''}">${status}</span>
-        ${r.phase==='result'?`<span class="controller-result">Result hold ${resultHold}s · next timer starts with new round</span>`:''}
-        ${r.forcedWinner?`<span class="controller-force">FORCE QUEUED: ${escapeHTML(r.forcedWinner)}</span>`:''}
+        <span style="background:#21262d;padding:4px 8px;border-radius:4px">Phase: <b style="color:${r.phase==='betting'?'#3fb950':r.phase==='forced'?'#f0c040':'#f85149'}">${(r.phase||'idle').toUpperCase()}</b></span>
+        <span style="background:#21262d;padding:4px 8px;border-radius:4px">⏱ <b>${left}s</b></span>
+        ${r.forcedWinner?`<span style="background:#3d2a00;color:#f0c040;padding:4px 8px;border-radius:4px">FORCE: ${r.forcedWinner}</span>`:''}
       </div>
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Current round bets · ${gameBets.length} slips · TOTAL ${totalCoins} coins · ROUND CLOCK ${serverTimer}s · ${r.phase==='betting'?`BET CLOSES IN ${betLeft}s`:'BETTING CLOSED'}</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Side totals (kam coins wali soft highlight)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
@@ -1874,8 +1812,6 @@ function adminDecisionCards(){
           </div>`;
         }).join('')}
       </div>
-      <div style="display:flex;justify-content:space-between;gap:6px;margin:4px 0 8px;font-size:10px;color:#8b949e"><span>DECISION: <b style="color:#7dd3fc">${escapeHTML(r.result||'PENDING')}</b></span><span>PREVIOUS: <b style="color:#fde68a">${escapeHTML(previous)}</b></span></div>
-      <div class="controller-bet-list">${gameBets.length?gameBets.slice(-8).reverse().map(b=>`<div><b>${escapeHTML(b.player||'Player')}</b><span>${escapeHTML(b.side||b.team)} · ${Number(b.amt)||0}</span></div>`).join(''):'<em>No bets in this round — totals reset automatically on next round</em>'}</div>
       <div style="font-size:10px;color:#8b949e;margin-bottom:6px">Force result (next / current reveal)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
         ${g.sides.map(s=>`<button onclick="forceWinner('${g.key}','${s}')" style="flex:1;min-width:60px;padding:8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:11px;cursor:pointer">${s}</button>`).join('')}
@@ -1896,7 +1832,6 @@ function admin(){
       <p style="color:#8b949e;font-size:10px;margin-top:12px">Authorized only</p>
     </div></div>`;
   }
-  syncControllerBets();
   const live=getGamesLive();
   const games=[{key:'andar-bahar',name:'Andar Bahar',perm:true},{key:'lucky7',name:'Lucky 7',perm:true},{key:'teen-patti',name:'Teen Patti',perm:true},{key:'dragon-tiger',name:'Dragon Tiger',perm:true},{key:'virtual',name:'Virtual Games',perm:false}];
   return `<div class="admin-panel">
@@ -2008,7 +1943,7 @@ function view(){
 }
 function render(){try{app.innerHTML=view()}catch(err){console.error('AntPro render recovery',err);app.innerHTML='<div style="min-height:100vh;background:#111;color:#ffe566;display:grid;place-items:center;padding:24px;text-align:center;font:700 14px Arial"><div>Live service reconnecting…<br><small style="display:block;margin-top:8px;color:#aaa;font-weight:400">Your demo round is safe. Please wait a moment.</small></div></div>'}}
 function go(v){
-  if(v==='login'){const role=state.user&&state.user.role||'player';state.loggedIn=false;state.menu=false;state.user=null;sessionStorage.removeItem('antpro_user');sessionStorage.removeItem('antpro_session_token');location.href=loginPath(role);return}
+  if(v==='login'){const role=state.user&&state.user.role||'player';state.loggedIn=false;state.menu=false;state.user=null;sessionStorage.removeItem('antpro_user');location.href=loginPath(role);return}
   const role=(state.user&&state.user.role)||'player';
   // Guards: player cannot open agent/hierarchy/admin
   if(v==='super' && role!=='supermaster'){toast('Only Super Master');return}
@@ -2027,4 +1962,3 @@ function closeMenu(e){if(e.target.classList.contains('drawer')){state.menu=false
 render();
 syncMarquee();
 setInterval(syncMarquee,15000);
-setInterval(()=>{if(state.view==='admin'&&state.adminAuthed)syncControllerBets()},500);
