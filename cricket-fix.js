@@ -58,7 +58,8 @@
         not: s.no_run != null ? s.no_run : (s.not != null ? s.not : '—'),
         yes: s.yes_run != null ? s.yes_run : (s.yes != null ? s.yes : '—'),
         rate: s.rate != null ? s.rate : '—',
-        status: s.status || 'SUSPENDED'
+        status: s.status || 'SUSPENDED',
+        result: s.result || s.winner || s.outcome || ''
       };
     });
   }
@@ -150,6 +151,7 @@
       });
 
       state.liveMatches = list;
+      if (typeof settleOpenCricketBets === 'function') settleOpenCricketBets(list);
       if (!list.length) state.liveMatchesError = 'No matches right now — scraper empty or offline';
       else state.liveMatchesError = '';
     } catch (e) {

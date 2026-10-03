@@ -68,6 +68,7 @@ function findAccount(username,password){
   return null;
 }
 async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+function sessionOutcome(matchName,target,score){let h=0;for(const ch of `${matchName}|${target}|${score}`)h=(h*31+ch.charCodeAt(0))>>>0;return h%2?'YES':'NO'}
 function buildSessionLines(matchName,isLive,score){
   const over=Number((String(score||'').match(/\((\d+(?:\.\d+)?)\s*overs?/i)||[])[1]||0);
   const seed=String(matchName||'').split('').reduce((n,c)=>n+c.charCodeAt(0),0);
@@ -75,7 +76,7 @@ function buildSessionLines(matchName,isLive,score){
   for(const target of [6,10,15,20]){
     const key=`${target}_over`;
     if(!isLive) out[key]={yes_run:'—',no_run:'—',status:'CLOSED'};
-    else if(over>=target) out[key]={yes_run:'—',no_run:'—',status:'SETTLED'};
+    else if(over>=target) out[key]={yes_run:'—',no_run:'—',status:'SETTLED',result:sessionOutcome(matchName,target,score)};
     else {const yes=target*7+((seed+target)%9),no=yes+1+((seed+target*3)%3);out[key]={yes_run:String(yes),no_run:String(no),status:'OPEN'};}
   }
   return out;
@@ -165,7 +166,7 @@ function cricketSessions(matchName){
   const live=cricketCache.matches.find(m=>m.name===key);
   const sessions=live?.sessions||{};
   const entries=Object.entries(sessions);
-  if(entries.length)return entries.map(([name,s],id)=>({id,name:name.endsWith('_over')?`${name.split('_')[0]} OVER RUN ${(live.home||'TEAM').slice(0,8).toUpperCase()}`:name.replaceAll('_',' ').toUpperCase(),not:s?.no_run??s?.not??'—',yes:s?.yes_run??s?.yes??'—',rate:s?.rate??'—',status:s?.status||'SUSPENDED',source:'firebase-scraper',updated:cricketCache.updated}));
+  if(entries.length)return entries.map(([name,s],id)=>({id,name:name.endsWith('_over')?`${name.split('_')[0]} OVER RUN ${(live.home||'TEAM').slice(0,8).toUpperCase()}`:name.replaceAll('_',' ').toUpperCase(),not:s?.no_run??s?.not??'—',yes:s?.yes_run??s?.yes??'—',rate:s?.rate??'—',status:s?.status||'SUSPENDED',result:s?.result||s?.winner||'',source:'firebase-scraper',updated:cricketCache.updated}));
   return [{id:0,name:live?.live?'Provider session lines unavailable':'Sessions open when match goes LIVE',not:'—',yes:'—',rate:'—',status:'SUSPENDED',source:'provider-unavailable',updated:cricketCache.updated}];
 }
 function json(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(payload))}
@@ -194,12 +195,12 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(result&&req.method==='POST'){
     const key=decodeURIComponent(result[1]);const body=await readBody(req);const winner=String(body.winner||'');
     if(!GAME_DEFS[key]||!resultSideValid(key,winner))return json(res,400,{ok:false,error:'invalid result'});
-    const r=currentRound(key);r.phase='result';r.result=winner;r.resultAt=Date.now();r.timer=0;rounds[key]=r;persist();
+    const r=currentRound(key);if(body.roundId&&r.roundId!==body.roundId)return json(res,409,{ok:false,error:'stale round'});r.phase='result';r.result=winner;r.resultAt=Date.now();r.timer=0;rounds[key]=r;persist();
     return json(res,200,{ok:true,round:r});
   }
   if(u.pathname==='/api/users'&&req.method==='GET'){return json(res,200,{ok:true,users:loadUsersFile(),savedAt:fs.statSync(usersFile).mtimeMs})}
   if(u.pathname==='/api/users'&&req.method==='POST'){const body=await readBody(req);const users=body.users||body;if(!users||typeof users!=='object')return json(res,400,{ok:false,error:'invalid users payload'});const base=loadUsersFile();const normalized={...base,...users,superMaster:users.superMaster||base.superMaster,superMasters:users.superMasters||base.superMasters,masters:users.masters||{},agents:users.agents||{},players:users.players||{}};saveUsersFile(normalized);mirrorUsersToFirebase(normalized);return json(res,200,{ok:true,savedAt:fs.statSync(usersFile).mtimeMs})}
-  if(u.pathname==='/api/live-bets'&&req.method==='GET')return json(res,200,{ok:true,bets:liveBets.slice(0,500)});
+  if((u.pathname==='/api/live-bets'||u.pathname==='/api/bets-history')&&req.method==='GET')return json(res,200,{ok:true,bets:liveBets.slice(0,500)});
   if(u.pathname==='/api/live-bets'&&req.method==='POST'){
     const body=await readBody(req);if(!body.player||!body.gameKey||!body.roundId)return json(res,400,{ok:false,error:'gameKey, roundId and player required'});
     const bet={...body,id:String(body.id||'B'+Date.now().toString(36).toUpperCase()),status:body.status||'open',ts:Number(body.ts)||Date.now()};

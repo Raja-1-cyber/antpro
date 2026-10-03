@@ -21,7 +21,11 @@
       result: b.result || (b.status === 'open' ? 'LIVE' : ''),
       gameKey: b.gameKey || '',
       match: b.gameKey || b.type || 'Casino',
-      roundId: b.roundId || ''
+      roundId: b.roundId || '',
+      matchName: b.matchName || b.match || '',
+      sessionKey: b.sessionKey || '',
+      sessionLine: b.sessionLine || '',
+      settledAt: b.settledAt || 0
     };
   }
 
@@ -139,7 +143,9 @@
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, tok ? { Authorization: 'Bearer ' + tok } : {}),
           body: JSON.stringify({
+            id: bet.id,
             gameKey: partial.gameKey || '',
+            roundId: partial.roundId || bet.roundId || '',
             player: bet.player,
             side: bet.team,
             team: bet.team,
@@ -148,7 +154,8 @@
             amt: bet.amt,
             status: bet.status,
             profit: bet.profit,
-            result: bet.result
+            result: bet.result,
+            ts: bet.ts
           })
         }).catch(function () {});
       } catch (e) {}

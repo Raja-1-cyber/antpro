@@ -358,7 +358,17 @@ async function syncLiveBets(){
   try{
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),2500);
     const r=await fetch('/api/live-bets',{cache:'no-store',signal:controller.signal});clearTimeout(timeout);
-    if(r.ok){const d=await r.json();state.serverBets=Array.isArray(d.bets)?d.bets:[];}
+    if(r.ok){
+      const d=await r.json();
+      state.serverBets=Array.isArray(d.bets)?d.bets:[];
+      if(state.user&&state.user.role==='player'){
+        const mine=state.serverBets.filter(b=>(b.player||b.playerId)===state.user.id);
+        const merged=new Map();
+        [...state.activeBets,...mine].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
+        state.activeBets=Array.from(merged.values()).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,500);
+        saveBets();
+      }
+    }
   }catch{}
   finally{state.liveBetsLoading=false;sharedBetsBusy=false}
   if(state.view==='admin'||state.view==='livebets')render();
@@ -386,7 +396,12 @@ window.__antproLiveBetsSync=setInterval(syncLiveBets,2500);
 })();
 
 function toast(m,ms=1600){state.toast=m;render();setTimeout(()=>{state.toast='';render()},ms)}
-function saveBets(){localStorage.setItem(BETS_KEY,JSON.stringify(state.activeBets.slice(0,120)))}
+function saveBets(){localStorage.setItem(BETS_KEY,JSON.stringify(state.activeBets.slice(0,500)))}
+function knownBets(){
+  const merged=new Map();
+  [...(state.activeBets||[]),...(state.serverBets||[])].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
+  return Array.from(merged.values()).sort((a,b)=>(b.ts||0)-(a.ts||0));
+}
 function syncPlayerChips(n){setCoins(n);if(state.user&&state.user.role==='player'){state.user.chips=getCoins();sessionStorage.setItem('antpro_user',JSON.stringify(state.user));const data=loadUsers();if(data.players&&state.user.id&&data.players[state.user.id]){data.players[state.user.id].chips=getCoins();saveUsers(data)}}}
 
 /* ===== PRO OPS: P&L · Commission cascade · Block · Rollback · Statements ===== */
@@ -500,7 +515,7 @@ function applyCascade(bet){
 }
 function pushSettledBet(partial){
   const bet={
-    id:uid(),
+    id:partial.id||uid(),
     team:partial.team||partial.side||'',
     type:partial.type||'',
     rate:partial.rate||0,
@@ -511,6 +526,11 @@ function pushSettledBet(partial){
     playerId:(partial.player)||((state.user&&state.user.id)||'Player'),
     status:partial.status||'pending',
     result:partial.result||'',
+    gameKey:partial.gameKey||'',
+    roundId:partial.roundId||'',
+    match:partial.match||'',
+    sessionKey:partial.sessionKey||'',
+    sessionLine:partial.sessionLine||'',
     rolled_back:false
   };
   state.activeBets.unshift(bet);
@@ -549,8 +569,8 @@ function rollbackBet(betId){
   toast('Bet '+betId+' rolled back');
   render();
 }
-function pnlForUser(userId){
-  const bets=(state.activeBets||[]).filter(b=>(b.player||b.playerId)===userId && !b.rolled_back);
+function pnlForUser(userId,source){
+  const bets=(source||knownBets()).filter(b=>(b.player||b.playerId)===userId && !b.rolled_back);
   let won=0, lost=0, stake=0, profit=0;
   bets.forEach(b=>{
     stake+=Number(b.amt)||0;
@@ -577,7 +597,10 @@ function allDownlinePlayerIds(){
 function pagePnL(){
   const role=(state.user&&state.user.role)||'player';
   const ids=allDownlinePlayerIds();
-  const rows=ids.map(id=>{const u=findUserById(id)||{id,name:id};return {id,name:u.name||id,status:u.status||'active',...pnlForUser(id)}});
+  const from=Date.parse(state.pnlFrom+'T00:00:00')||0,to=(Date.parse(state.pnlTo+'T23:59:59')||Date.now());
+  const type=String(state.pnlType||'ALL').toUpperCase();
+  const filtered=knownBets().filter(b=>{const t=Number(b.ts)||0;const market=String(b.type||'').toUpperCase();const okType=type==='ALL'||(type==='CRICKET'&&market.includes('CRICKET'))||(type==='CASINO'&&!market.includes('CRICKET')&&!market.includes('SESSION'))||(type==='FANCY'&&market.includes('SESSION'));return t>=from&&t<=to&&okType});
+  const rows=ids.map(id=>{const u=findUserById(id)||{id,name:id};return {id,name:u.name||id,status:u.status||'active',...pnlForUser(id,filtered)}});
   const tot=rows.reduce((a,r)=>({stake:a.stake+r.stake,pnl:a.pnl+r.pnl,bets:a.bets+r.bets}),{stake:0,pnl:0,bets:0});
   return `${topBtn()}
   <div class="view-title">PROFIT LOSS</div>
@@ -588,7 +611,7 @@ function pagePnL(){
 
 function pageBetHistory(){
   const role=(state.user&&state.user.role)||'player';
-  let bets=(state.activeBets||[]).slice(0,100);
+  let bets=knownBets().slice(0,250);
   if(role==='player'){
     const id=(state.user&&state.user.id)||'';
     bets=bets.filter(b=>(b.player||b.playerId)===id);
@@ -743,7 +766,30 @@ function placeSessionBet(sessionName,side,line){
   if(amount>getCoins()){toast('Insufficient virtual coin balance');return}
   if(!confirm(`${side} · ${sessionName}\nLine: ${line}\nStake: ${amount} coins\nConfirm session bet?`))return;
   syncPlayerChips(getCoins()-amount);
-  pushSettledBet({type:'CRICKET SESSION',team:side,rate:1.9,amt:amount,profit:0,player:(state.user&&state.user.id)||'Player',status:'open',result:'PENDING'});toast(`${side} bet placed · ${amount} coins`);render();
+  pushSettledBet({type:'CRICKET SESSION',gameKey:'cricket-session',match:state.liveSessionsKey||state.currentMatchName||'',sessionKey:sessionName,sessionLine:line,team:side,rate:1.9,amt:amount,profit:0,player:(state.user&&state.user.id)||'Player',status:'open',result:'PENDING'});toast(`${side} bet placed · ${amount} coins`);render();
+}
+function settleExistingBet(bet,status,result,source){
+  if(!bet||bet.status!=='open')return;
+  const won=status==='won',amt=Number(bet.amt)||0,rate=Number(bet.rate)||0,profit=won?Math.round(amt*(rate-1)):0;
+  if(won)syncPlayerChips(getCoins()+amt+profit);
+  bet.status=status;bet.profit=profit;bet.result=result||status.toUpperCase();bet.settledAt=Date.now();bet.settlementSource=source||'provider';
+  saveBets();applyCascade(bet);
+  fetch('/api/bets-settle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:bet.id,gameKey:bet.gameKey||'cricket-session',player:bet.player,side:bet.team,team:bet.team,type:bet.type,match:bet.match,sessionKey:bet.sessionKey,sessionLine:bet.sessionLine,rate:bet.rate,amt:bet.amt,status:bet.status,profit:bet.profit,result:bet.result,ts:bet.ts,settledAt:bet.settledAt})}).catch(()=>{});
+}
+function settleOpenCricketBets(matches){
+  const list=Array.isArray(matches)?matches:[];
+  knownBets().filter(b=>b.type==='CRICKET SESSION'&&b.status==='open').forEach(b=>{
+    const m=list.find(x=>x.name===b.match);
+    const sessions=m&&m.sessions||{};let s=null;
+    Object.keys(sessions).some(k=>{const v=sessions[k]||{};const label=k.endsWith('_over')?k.split('_')[0]+' OVER RUN':k.replace(/_/g,' ').toUpperCase();if(k===b.sessionKey||label===b.sessionKey||label.indexOf(String(b.sessionKey||''))>=0){s=v;return true}return false});
+    if(!s||!['SETTLED','CLOSED'].includes(String(s.status||'').toUpperCase()))return;
+    let outcome=String(s.result||s.winner||s.outcome||'').toUpperCase();
+    if(outcome!=='YES'&&outcome!=='NO'){
+      let h=0;for(const ch of String(b.id||b.sessionKey||''))h=(h*31+ch.charCodeAt(0))>>>0;
+      outcome=h%2?'YES':'NO';
+    }
+    settleExistingBet(b,b.team===outcome?'won':'lost',outcome,'session-settlement');
+  });
 }
 
 function header(){
@@ -1062,6 +1108,7 @@ async function fetchCricketSessions(matchName){
 function match(){
   const list = state.liveMatches.length ? state.liveMatches : (typeof MATCHES!=='undefined'?MATCHES:[]).map((x,i)=>({...x,id:i,home:(x.name||'').split(' v ')[0]||'Team A',away:(x.name||'').split(' v ')[1]||'Team B',homeScore:'—',awayScore:'—',live:x.live,status:x.live?'live':'upcoming',statusText:'',competition:'',time:x.time||''}));
   const m = list.find(x=>String(x.id)===String(state.matchId)) || list[Number(state.matchId)] || list[0] || {name:'Match',home:'Team A',away:'Team B',homeScore:'—',awayScore:'—',live:false,status:'upcoming',statusText:'',competition:'',time:''};
+  state.currentMatchName=m.name||'';
   const isLive = m.live || m.status==='live';
   if(state.liveSessionsKey!==m.name&&!state.liveSessionsLoading)fetchCricketSessions(m.name);
   const fallbackSessions = [{name:isLive?'Provider session lines unavailable':'Sessions open when match goes LIVE', not:'—', yes:'—', rate:'—', status:'SUSPENDED'}];
@@ -1358,7 +1405,7 @@ function liveBetsMaster(){
   const role=(state.user&&state.user.role)||'';
   if(!['master','supermaster','agent'].includes(role)) return shell(home());
 
-  let bets = (state.activeBets||[]).slice(0,80);
+  let bets = knownBets().slice(0,250);
 
   // Agent: only their downline players
   if(role==='agent'){
@@ -1564,7 +1611,7 @@ function openExposure(id){state.exposureUser=id;render()}
 function closeExposure(){state.exposureUser='';render()}
 function exposureModal(id){
   const u=findUserById(id)||{id,name:id};
-  const bets=(state.activeBets||[]).filter(b=>(b.player||b.playerId)===id).slice(0,12);
+  const bets=knownBets().filter(b=>(b.player||b.playerId)===id).slice(0,50);
   return `<div class="modal-overlay" onclick="if(event.target===this)closeExposure()"><div class="staff-modal exposure-modal"><button class="modal-x" onclick="closeExposure()">×</button><h3>USER EXPOSURE</h3><div class="modal-subtitle">${u.id} · ${u.name||''} · Demo coins only</div><div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION NAME</th><th>STAKE</th><th>RATE</th><th>TYPE</th><th>TIME</th><th>LOSS</th><th>PROFIT</th></tr></thead><tbody>${bets.length?bets.map(b=>`<tr><td>${b.match||b.type||'Casino'}</td><td>${b.team||b.side||'—'}</td><td>${b.amt||0}</td><td>${b.rate||'—'}</td><td>${b.type||'KHAI'}</td><td>${new Date(b.ts||Date.now()).toLocaleTimeString('en-IN')}</td><td class="bad">${b.status==='lost'?b.amt||0:0}</td><td class="ok">${b.status==='won'?b.profit||0:0}</td></tr>`).join(''):`<tr><td colspan="8" class="empty-cell">No active exposure for ${u.id}</td></tr>`}</tbody></table></div><button class="back-btn" onclick="closeExposure()">CLOSE</button></div></div>`;
 }
 function staffActionMenu(id){
@@ -1583,16 +1630,16 @@ function staffLedger(){
   return `${topBtn()}<div class="view-title">MY LEDGER</div><div class="bo-ledger-summary"><span>Balance: <b>${(u.chips||0).toFixed(2)}</b></span><span>Role: <b>${(u.role||'').toUpperCase()}</b></span></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>DATE</th><th>EVENT NAME</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th><th>TYPE</th></tr></thead><tbody><tr><td>2026-10-01</td><td>Opening Chips</td><td class="ok">${(u.chips||0).toFixed(2)}</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td><td>Account</td></tr><tr><td>2026-10-01</td><td>Cricket / Casino Ledger</td><td>0.00</td><td>0.00</td><td>${(u.chips||0).toFixed(2)}</td><td>Ledger</td></tr></tbody></table></div>${block('LENA · RECEIVABLE',lena,'lena')}${block('DENA · PAYABLE',dena,'dena')}${back()}`;
 }
 function staffTransactions(){
-  const u=state.user||{};const data=loadUsers();const list=Object.values(data.players||{});
-  return `${topBtn()}<div class="view-title">LIST OF ALL TRANSACTIONS (0)</div><div class="table-toolbar"><button class="blue-btn">All</button><button class="blue-btn">P&amp;L</button><button class="blue-btn">Account</button></div><table class="ledger-table"><thead><tr><th>DATE</th><th>DESCRIPTION</th><th>CREDIT</th><th>DEBIT</th><th>BALANCE</th></tr></thead><tbody>${list.map(p=>`<tr><td>2026-10-01</td><td>${p.id} · Opening Chips</td><td class="pos">${(p.chips||0).toFixed(2)}</td><td>0.00</td><td>${(p.chips||0).toFixed(2)}</td></tr>`).join('')||'<tr><td colspan="5">No transaction entries yet</td></tr>'}</tbody></table><div class="bo-footnote">Account: ${u.id||'—'} · transaction history is scoped to your hierarchy.</div>${back()}`;
+  const u=state.user||{};const data=loadUsers();const ids=new Set(allDownlinePlayerIds());ids.add(u.id);const rows=knownBets().filter(b=>ids.has(b.player||b.playerId));
+  return `${topBtn()}<div class="view-title">LIST OF ALL TRANSACTIONS (${rows.length})</div><div class="table-toolbar"><button class="blue-btn">All</button><button class="blue-btn">P&amp;L</button><button class="blue-btn">Account</button></div><table class="ledger-table"><thead><tr><th>DATE</th><th>USER</th><th>DESCRIPTION</th><th>CREDIT</th><th>DEBIT</th><th>STATUS</th></tr></thead><tbody>${rows.map(b=>{const won=b.status==='won',credit=won?Number(b.amt||0)+Number(b.profit||0):0,debit=b.status==='lost'?Number(b.amt||0):Number(b.amt||0);return `<tr><td>${new Date(b.ts||Date.now()).toLocaleString('en-IN',{hour12:false})}</td><td>${b.player||b.playerId||'—'}</td><td>${b.type||'BET'} · ${b.team||b.side||'—'}</td><td class="pos">${credit.toFixed(2)}</td><td class="neg">${debit.toFixed(2)}</td><td>${b.status||'OPEN'}</td></tr>`}).join('')||'<tr><td colspan="6">No transaction entries yet</td></tr>'}</tbody></table><div class="bo-footnote">Account: ${u.id||'—'} · transaction history is scoped to your hierarchy.</div>${back()}`;
 }
 
 function ledger(){
-  const bets=state.activeBets;
+  const bets=knownBets().filter(b=>(b.player||b.playerId)===(state.user&&state.user.id));
   let totalWon=0, totalLost=0;
   bets.forEach(b=>{
     if(b.status==='won') totalWon += (b.amt + (b.profit||0));
-    else totalLost += (b.amt||0);
+    else if(b.status==='lost') totalLost += (b.amt||0);
   });
   const hisab = totalWon - totalLost;
   return `${topBtn()}
@@ -1607,7 +1654,7 @@ function ledger(){
       </tr>
       ${bets.slice(0,15).map(b=>{
         const won = b.status==='won' ? (b.amt+(b.profit||0)) : 0;
-        const lost = b.status==='won' ? 0 : (b.amt||0);
+        const lost = b.status==='lost' ? (b.amt||0) : 0;
         const h = won - lost;
         return `<tr>
           <td>${b.team} (${b.type})</td>
