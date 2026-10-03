@@ -1806,7 +1806,7 @@ function adminDecisionCards(){
   const defs=[
     {key:'andar-bahar',name:'Andar Bahar',type:'AndarBahar',sides:['Andar','Bahar']},
     {key:'lucky7',name:'Lucky 7',type:'LUCKY 7',sides:['7 UP','7','7 DOWN']},
-    {key:'teen-patti',name:'Teen Patti',type:'TEEN PATTI',sides:['Team A','Tie','Team B']},
+    {key:'teen-patti',name:'Teen Patti',type:'TEEN PATTI',sides:['Team A','Team B']},
     {key:'dragon-tiger',name:'Dragon Tiger',type:'DRAGON TIGER',sides:['Dragon','Tie','Tiger']}
   ];
   return defs.map(g=>{
