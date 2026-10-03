@@ -13,6 +13,7 @@ const PASS_KEY = 'antpro_master_pass';
 const USERS_KEY = 'antpro_users_v2';
 const USERS_DIRTY_KEY = 'antpro_users_dirty_v1';
 const USERS_CLEANUP_KEY = 'antpro_demo_cleanup_v1';
+const COIN_SUPPLY = 50000000;
 const LEGACY_DEMO_IDS = new Set(['SUPER','SM001','MASTER2','A1001','A1002','P2001','P2002','P2003']);
 let usersSaveChain = Promise.resolve();
 function readSessionUser(){
@@ -58,17 +59,25 @@ function sanitizeUserStore(data){
   data.meta={...(data.meta||{}),demoCleanupVersion:1};
   return data;
 }
+function normalizeCoinSupply(data){
+  data=data||defaultUsers();data.masters=data.masters||{};
+  if(!data.masters.MASTER)data.masters.MASTER={id:'MASTER',name:'Master',role:'master',pass:'master123',chips:0,commission:0,share:100,agents:[],status:'active'};
+  const nonRoot=[...(data.superMaster?[data.superMaster]:[]),...Object.values(data.superMasters||{}),...Object.values(data.masters||{}).filter(x=>String(x.id).toUpperCase()!=='MASTER'),...Object.values(data.agents||{}),...Object.values(data.players||{})].reduce((n,u)=>n+Math.max(0,Math.floor(Number(u&&u.chips)||0)),0);
+  data.masters.MASTER.chips=Math.max(0,COIN_SUPPLY-nonRoot);
+  data.meta={...(data.meta||{}),fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1};
+  return data;
+}
 function loadUsers(){
   try{
     const raw=localStorage.getItem(USERS_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=sanitizeUserStore(parsed);localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
+    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=normalizeCoinSupply(sanitizeUserStore(parsed));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
   }catch{}
   const d=defaultUsers();
-  try{localStorage.setItem(USERS_KEY,JSON.stringify(d))}catch{}
-  return d;
+  const clean=normalizeCoinSupply(d);try{localStorage.setItem(USERS_KEY,JSON.stringify(clean))}catch{}
+  return clean;
 }
 function saveUsers(u){
-  const snapshot=JSON.parse(JSON.stringify(u));
+  const snapshot=JSON.parse(JSON.stringify(normalizeCoinSupply(sanitizeUserStore(u))));
   try{localStorage.setItem(USERS_KEY,JSON.stringify(snapshot));localStorage.setItem(USERS_DIRTY_KEY,String(Date.now()))}catch{}
   usersSaveChain=usersSaveChain.then(async()=>{
     try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:snapshot})});if(!r.ok)throw new Error('users save '+r.status);try{localStorage.removeItem(USERS_DIRTY_KEY)}catch{};return true}
@@ -435,6 +444,33 @@ function updateUserFields(id, fields){
   if(data.players){for(const k of Object.keys(data.players)){if((data.players[k].id||k).toUpperCase()===ID){Object.assign(data.players[k], fields); hit=true;}}}
   if(hit) saveUsers(data);
   return hit;
+}
+function mutableUser(data,id){
+  const ID=String(id||'').toUpperCase();
+  if(data.superMaster&&(data.superMaster.id||'').toUpperCase()===ID)return data.superMaster;
+  for(const bucket of ['superMasters','masters','agents','players'])for(const k of Object.keys(data[bucket]||{}))if((data[bucket][k].id||k).toUpperCase()===ID)return data[bucket][k];
+  return null;
+}
+function directParentId(child,data){
+  if(!child)return '';
+  if(child.role==='supermaster')return String(child.parentMasterId||'MASTER').toUpperCase();
+  if(child.role==='agent')return String(child.superId&&((data.superMasters||{})[child.superId]||data.superMaster)?child.superId:(child.masterId||'MASTER')).toUpperCase();
+  if(child.role==='player')return String(child.agentId||'').toUpperCase();
+  return '';
+}
+function transferChips(fromId,toId,amount,note){
+  const n=Math.floor(Number(amount));if(!Number.isSafeInteger(n)||n<=0){toast('Amount positive whole coins hona chahiye');return false}
+  const data=loadUsers(),from=mutableUser(data,fromId),to=mutableUser(data,toId);
+  if(!from||!to){toast('User not found');return false}
+  if(String(directParentId(to,data)).toUpperCase()!==String(from.id||fromId).toUpperCase()){toast('Coins sirf direct downline ko transfer ho sakte hain');return false}
+  if(Math.floor(Number(from.chips)||0)<n){toast('Parent ke paas itne coins nahi hain');return false}
+  from.chips=Math.floor(Number(from.chips)||0)-n;to.chips=Math.floor(Number(to.chips)||0)+n;
+  saveUsers(data);
+  addStatement({type:'TRANSFER_OUT',userId:from.id,amount:-n,note:note||`Transfer to ${to.id}`,toUser:to.id,balance:from.chips});
+  addStatement({type:'TRANSFER_IN',userId:to.id,amount:n,note:note||`Transfer from ${from.id}`,fromUser:from.id,balance:to.chips});
+  audit('COIN TRANSFER',from.id,`${n} to ${to.id}`);
+  if(state.user&&String(state.user.id).toUpperCase()===String(from.id).toUpperCase()){state.user={...from,role:state.user.role};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));}
+  toast(`${n.toLocaleString()} coins → ${to.id}`);render();return true;
 }
 function editUserDetails(id){
   const u=findUserById(id);if(!u){toast('User not found');return}
@@ -1557,19 +1593,20 @@ function masterCreateSuperMaster(){
   if(!state.user||state.user.role!=='master'){toast('Only Root Master');return}
   const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newSuperComm')||{}).value,10)||0;const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
   if(!id||!pass){toast('Super ID + Password required');return}
-  const data=loadUsers();if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
-  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,parentMasterId:state.user.id,status:'active'};saveUsers(data);audit('CREATE SUPER MASTER',id,`parent ${state.user.id}`);toast('Super Master '+id+' created');render();
+  const data=loadUsers(),parent=mutableUser(data,state.user.id);if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
+  if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,parentMasterId:state.user.id,status:'active'};parent.chips-=chips;saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE SUPER MASTER',id,`parent ${state.user.id} · ${chips} coins`);toast('Super Master '+id+' created with '+chips.toLocaleString()+' coins');render();
 }
 function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('Agent ID + Password required');return}
   const data=loadUsers();if(!data.agents)data.agents={};if(data.agents[id]){toast('Agent ID exists');return}
-  const masterId=state.user.parentMasterId||'MASTER';
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};
+  const masterId=state.user.parentMasterId||'MASTER',parent=mutableUser(data,state.user.id);if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Super Master ke available coins se zyada nahi de sakte');return}
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;
   if(!data.masters)data.masters={};
   if(data.masters[masterId]){if(!Array.isArray(data.masters[masterId].agents))data.masters[masterId].agents=[];if(!data.masters[masterId].agents.includes(id))data.masters[masterId].agents.push(id)}
-  saveUsers(data);audit('CREATE AGENT',id,`super master ${state.user.id}`);toast('Agent '+id+' created');render();
+  saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE AGENT',id,`super master ${state.user.id} · ${chips} coins`);toast('Agent '+id+' created');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
@@ -1582,10 +1619,13 @@ function masterCreateAgent(){
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(data.agents[id]){toast('Agent ID exists');return;}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',superId:'SUPER',players:[],status:'active',createdAt:new Date().toISOString()};
+  const parent=mutableUser(data,state.user.id);if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',superId:'',players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
-  audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'}`);
+  addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});
+  addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});
+  audit('CREATE AGENT',id,`master ${(state.user&&state.user.id)||'MASTER'} · ${chips} coins`);
   toast('Agent '+id+' created');
   render();
 }
@@ -1598,11 +1638,14 @@ function masterAssignPlayer(){
   if(!pid||!aid){toast('Player ID + Agent ID required');return;}
   const data=loadUsers();
   if(!data.agents[aid]){toast('Agent not found');return;}
-  if(!data.players)data.players={};data.players[pid]={id:pid,name:pname||pid,role:'player',pass:'play123',chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};
+  const parent=data.agents[aid];if(chips<0||chips>Number(parent.chips||0)){toast('Agent ke available coins se zyada nahi de sakta');return}
+  if(!data.players)data.players={};data.players[pid]={id:pid,name:pname||pid,role:'player',pass:'play123',chips,agentId:aid,status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;
   if(!data.agents[aid].players) data.agents[aid].players=[];
   if(!data.agents[aid].players.includes(pid)) data.agents[aid].players.push(pid);
   saveUsers(data);
-  audit('ASSIGN CLIENT',pid,`agent ${aid}`);
+  addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${pid}`,toUser:pid,balance:parent.chips});
+  addStatement({type:'TRANSFER_IN',userId:pid,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});
+  audit('ASSIGN CLIENT',pid,`agent ${aid} · ${chips} coins`);
   toast('Player '+pid+' → Agent '+aid);
   render();
 }
@@ -1727,7 +1770,7 @@ function boAction(id,action){
   const u=findUserById(id);if(!u){toast('User not found');return}
   if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
-    const next=Math.max(0,(u.chips||0)+(action==='deposit'?n:-n));updateUserFields(id,{chips:next});audit(action.toUpperCase(),id,`${n} demo chips`);toast(action+' '+n+' chips · '+id);
+    const ok=action==='deposit'?transferChips(state.user.id,id,n,`Deposit to ${id}`):transferChips(id,state.user.id,n,`Withdraw from ${id}`);if(!ok)return;
   }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
   else if(action==='inactive'){setUserStatus(id,'suspended');toast('Demo user inactive · '+id)}
   else if(action==='exposure'){openExposure(id);return}
@@ -1745,7 +1788,8 @@ function agentCreateClient(){
   const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=parseInt((document.getElementById('newClientShare')||{}).value,10)||0;const commission=parseInt((document.getElementById('newClientComm')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
   const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
-  data.players[id]={id,name,role:'player',pass,chips,share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};if(!data.agents[aid].players)data.agents[aid].players=[];data.agents[aid].players.push(id);saveUsers(data);state.createClient=false;toast('Client '+id+' created under '+aid);render();
+  const parent=data.agents[aid];if(chips<0||chips>Number(parent.chips||0)){toast('Agent ke available coins se zyada nahi de sakta');return}
+  data.players[id]={id,name,role:'player',pass,chips,share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;if(!parent.players)parent.players=[];parent.players.push(id);saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});state.createClient=false;toast('Client '+id+' created with '+chips.toLocaleString()+' coins');render();
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
@@ -1816,18 +1860,7 @@ function agentCutChips(pid){
   if(amt===null) return;
   const n=parseInt(amt,10);
   if(!n||n<=0){toast('Invalid amount');return;}
-  const data=loadUsers();
-  const p=data.players[pid];
-  if(!p){toast('Not found');return;}
-  if((p.chips||0)<n){toast('Player ke paas itne chips nahi');return;}
-  p.chips=(p.chips||0)-n;
-  // credit agent book
-  const agent=data.agents[state.user.id];
-  if(agent) agent.chips=(agent.chips||0)+n;
-  saveUsers(data);
-  state.user=data.agents[state.user.id]||state.user;
-  sessionStorage.setItem('antpro_user',JSON.stringify(state.user));
-  toast(`Cut ${n} from ${pid}`);
+  if(!transferChips(pid,state.user.id,n,`Withdraw from client ${pid}`))return;
   if(state.view==='agent-player'){state._viewPlayer=p;}
   render();
 }
@@ -1836,18 +1869,7 @@ function agentAddChips(pid){
   if(amt===null) return;
   const n=parseInt(amt,10);
   if(!n||n<=0){toast('Invalid amount');return;}
-  const data=loadUsers();
-  const agent=data.agents[state.user.id];
-  if(!agent){toast('Agent error');return;}
-  if((agent.chips||0)<n){toast('Aapke paas itne chips nahi');return;}
-  agent.chips-=n;
-  const p=data.players[pid];
-  if(!p){toast('Player not found');return;}
-  p.chips=(p.chips||0)+n;
-  saveUsers(data);
-  state.user=agent;
-  sessionStorage.setItem('antpro_user',JSON.stringify(agent));
-  toast(`Added ${n} to ${pid}`);
+  if(!transferChips(state.user.id,pid,n,`Deposit to client ${pid}`))return;
   if(state.view==='agent-player'){state._viewPlayer=p;}
   render();
 }

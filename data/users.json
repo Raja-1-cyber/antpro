@@ -1,6 +1,8 @@
 {
   "meta": {
-    "demoCleanupVersion": 1
+    "demoCleanupVersion": 1,
+    "fixedCoinSupply": 50000000,
+    "coinSupplyVersion": 1
   },
   "superMaster": null,
   "superMasters": {},
@@ -10,7 +12,7 @@
       "name": "Master",
       "role": "master",
       "pass": "master123",
-      "chips": 0,
+      "chips": 50000000,
       "commission": 0,
       "share": 100,
       "agents": [],
