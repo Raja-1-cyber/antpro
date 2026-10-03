@@ -99,6 +99,12 @@ async function syncUsersFromServer(){
     if(d&&d.ok&&d.users&&d.users.masters?.MASTER){
       const merged=mergeUserStores(loadUsers(),d.users);
       localStorage.setItem(USERS_KEY,JSON.stringify(merged));
+      if(typeof state!=='undefined'&&state.user?.id){
+        const id=String(state.user.id).toUpperCase();
+        const bucket=state.user.role==='player'?'players':state.user.role==='agent'?'agents':state.user.role==='master'?'masters':state.user.role==='supermaster'?'superMasters':'';
+        const fresh=bucket&&merged[bucket]?Object.values(merged[bucket]).find(x=>String(x.id||'').toUpperCase()===id):null;
+        if(fresh){state.user={...state.user,...fresh,role:state.user.role};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));if(state.user.role==='player')setCoins(fresh.chips||0)}
+      }
       return merged;
     }
   }catch{}
@@ -338,6 +344,33 @@ const state={
 };
 
 let sharedSyncBusy=false;
+let betsSyncBusy=false;
+async function syncBetsFromServer(){
+  if(!state.loggedIn||betsSyncBusy||!state.user)return;
+  betsSyncBusy=true;
+  try{
+    const token=sessionStorage.getItem('antpro_session_token')||'';
+    const headers=token?{Authorization:'Bearer '+token}:{};
+    const historyPath=state.user.role==='player'?'/api/bets-history?limit=500&player='+encodeURIComponent(state.user.id):'/api/bets-history?limit=500';
+    const [historyRes,liveRes]=await Promise.all([
+      fetch(historyPath,{cache:'no-store',headers}),
+      fetch('/api/live-bets',{cache:'no-store'})
+    ]);
+    const incoming=[];
+    if(historyRes.ok){const d=await historyRes.json();if(Array.isArray(d.bets))incoming.push(...d.bets)}
+    if(liveRes.ok){const d=await liveRes.json();if(Array.isArray(d.bets))incoming.push(...d.bets)}
+    if(!incoming.length)return;
+    const byId=new Map();
+    [...state.activeBets,...incoming].forEach((b,i)=>{const id=b.id||`${b.player||''}|${b.roundId||''}|${b.gameKey||b.type||''}|${b.side||b.team||''}|${b.ts||i}`;byId.set(id,{...byId.get(id),...b,id})});
+    state.activeBets=[...byId.values()].sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0)).slice(0,500);
+    saveBets();
+    const statements=loadStatements();const statementIds=new Set(statements.map(x=>x.betId).filter(Boolean));
+    incoming.filter(b=>(b.status==='won'||b.status==='lost')&&b.id&&!statementIds.has(b.id)).forEach(b=>statements.unshift({id:'S-'+b.id,betId:b.id,type:'BET',userId:b.player,amount:b.status==='won'?(Number(b.profit)||0):-(Number(b.amt)||0),note:(b.type||b.gameKey||'')+' '+(b.side||b.team||'')+' '+b.status,ts:Number(b.ts)||Date.now()}));
+    saveStatements(statements);
+    if(['ledger','bethistory','pnl','statement','agent-player','admin','hierarchy'].includes(state.view))render();
+  }catch{}
+  finally{betsSyncBusy=false}
+}
 async function syncControllerBets(){
   if(state.view!=='admin'||!state.adminAuthed||state.controllerBetsBusy)return;
   state.controllerBetsBusy=true;
@@ -366,6 +399,10 @@ async function syncSharedRounds(){
 }
 setTimeout(syncSharedRounds,50);
 setInterval(syncSharedRounds,1000);
+setTimeout(syncUsersFromServer,200);
+setInterval(syncUsersFromServer,1000);
+setTimeout(syncBetsFromServer,150);
+setInterval(syncBetsFromServer,1000);
 
 (function initRoute(){
   const p=location.pathname.replace(/\/$/,'')||'/';
