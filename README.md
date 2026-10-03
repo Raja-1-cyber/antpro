@@ -32,11 +32,9 @@ cd scraper && pip install -r requirements.txt && python cricket_scraper.py
 ## Render
 See `DEPLOY_RENDER.md`
 
-## Demo logins
-- Player: P2001 / play123
-- Agent: A1001 / agent123
-- Master: MASTER / master123
-- Super: SUPER / super123
+## Initial login
+- Master: `MASTER` / `master123`
+- Master account se Super Masters, Agents aur Clients create karein.
 - Controller: /x9k2-ns-ctrl
 
 **Note:** Upload full project from `antpro-complete.zip` if any large files (app.js, assets) are missing — GitHub web UI → Upload files.

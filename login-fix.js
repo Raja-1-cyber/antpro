@@ -8,53 +8,21 @@
 
   function seedDemoUsers() {
     var data = null;
-    try {
-      if (typeof loadUsers === 'function') data = loadUsers();
-    } catch (e) {}
-    if (!data || typeof data !== 'object') {
-      data = { superMaster: null, superMasters: {}, masters: {}, agents: {}, players: {} };
-    }
+    try { if (typeof loadUsers === 'function') data = loadUsers(); } catch (e) {}
+    if (!data || typeof data !== 'object') data = {meta:{demoCleanupVersion:1},superMaster:null,superMasters:{},masters:{},agents:{},players:{}};
     data.masters = data.masters || {};
     data.agents = data.agents || {};
     data.players = data.players || {};
     data.superMasters = data.superMasters || {};
-
-    if (!data.masters.MASTER) {
-      data.masters.MASTER = {
-        id: 'MASTER', name: 'Root Master', role: 'master',
-        pass: 'master123', chips: 0, agents: [], status: 'active', share: 100
-      };
-    } else if (!data.masters.MASTER.pass) {
-      data.masters.MASTER.pass = 'master123';
-    }
-    if (!data.superMasters.SM001) {
-      data.superMasters.SM001 = {
-        id: 'SM001', name: 'Demo SuperMaster', role: 'supermaster',
-        pass: 'super123', chips: 0, agents: ['A1001'], status: 'active',
-        parentMasterId: 'MASTER', share: 50
-      };
-    }
-    if (!data.agents.A1001) {
-      data.agents.A1001 = {
-        id: 'A1001', name: 'Demo Agent', role: 'agent',
-        pass: 'agent123', chips: 0, players: ['P2001'], status: 'active',
-        masterId: 'MASTER', superId: 'SM001', share: 20
-      };
-    }
-    if (!data.players.P2001) {
-      data.players.P2001 = {
-        id: 'P2001', name: 'Demo Player', role: 'player',
-        pass: 'play123', chips: 100000, agentId: 'A1001', status: 'active', share: 0
-      };
-    }
+    if (!data.masters.MASTER) data.masters.MASTER = {id:'MASTER',name:'Master',role:'master',pass:'master123',chips:0,commission:0,share:100,agents:[],status:'active'};
+    else if (!data.masters.MASTER.pass) data.masters.MASTER.pass = 'master123';
     try {
       var key = typeof USERS_KEY !== 'undefined' ? USERS_KEY : 'antpro_users_v3';
-      if (typeof normalizeHierarchy === 'function') data = normalizeHierarchy(data);
+      if (typeof sanitizeUserStore === 'function') data = sanitizeUserStore(data);
       localStorage.setItem(key, JSON.stringify(data));
     } catch (e3) {}
     return data;
   }
-
   seedDemoUsers();
   setTimeout(seedDemoUsers, 200);
   setTimeout(seedDemoUsers, 800);
@@ -424,5 +392,5 @@
     }
   }, 2000);
 
-  console.log('[AntPro] login-fix v3 mobile-ready | P2001/play123 | OTP ' + DEMO_OTP);
+  console.log('[AntPro] login-fix v4 storage-safe | Master creates hierarchy | OTP ' + DEMO_OTP);
 })();

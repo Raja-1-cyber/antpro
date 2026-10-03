@@ -22,26 +22,34 @@ let liveBets=[];try{liveBets=JSON.parse(fs.readFileSync(betsFile,'utf8'))||[]}ca
 function persist(){const tmp=roundsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rounds,null,2));fs.renameSync(tmp,roundsFile)}
 function persistMarquee(){const tmp=marqueeFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify({text:marquee},null,2));fs.renameSync(tmp,marqueeFile)}
 function persistBets(){const tmp=betsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(liveBets.slice(0,2000),null,2));fs.renameSync(tmp,betsFile)}
-function defaultUsers(){const sm={id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,parentMasterId:'MASTER'};return {superMaster:sm,superMasters:{SUPER:sm},masters:{MASTER:{id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,agents:['A1001','A1002']},MASTER2:{id:'MASTER2',name:'Master Two',pass:'master123',role:'master',chips:80000,commission:5,share:95,agents:[]}},agents:{A1001:{id:'A1001',name:'Agent-01',role:'agent',pass:'agent123',chips:50000,commission:10,share:20,masterId:'MASTER',superId:'SUPER',players:['P2001','P2002']},A1002:{id:'A1002',name:'Agent-02',role:'agent',pass:'agent123',chips:25000,commission:8,share:15,masterId:'MASTER',superId:'SUPER',players:['P2003']}},players:{P2001:{id:'P2001',name:'Player One',role:'player',pass:'play123',chips:5000,agentId:'A1001'},P2002:{id:'P2002',name:'Player Two',role:'player',pass:'play123',chips:3200,agentId:'A1001'},P2003:{id:'P2003',name:'Player Three',role:'player',pass:'play123',chips:1500,agentId:'A1002'}}};}
+const LEGACY_DEMO_IDS=new Set(['SUPER','SM001','MASTER2','A1001','A1002','P2001','P2002','P2003']);
+function purgeLegacyDemoUsers(u){
+  if(!u||typeof u!=='object')u={};
+  if(u.meta&&u.meta.demoCleanupVersion===1)return u;
+  if(u.superMaster&&LEGACY_DEMO_IDS.has(String(u.superMaster.id||'').toUpperCase()))u.superMaster=null;
+  for(const bucket of ['superMasters','masters','agents','players']){
+    u[bucket]=u[bucket]||{};
+    for(const id of Object.keys(u[bucket]))if(LEGACY_DEMO_IDS.has(String(id).toUpperCase())||LEGACY_DEMO_IDS.has(String(u[bucket][id]?.id||'').toUpperCase()))delete u[bucket][id];
+  }
+  for(const m of Object.values(u.masters||{}))if(Array.isArray(m.agents))m.agents=m.agents.filter(id=>!LEGACY_DEMO_IDS.has(String(id).toUpperCase()));
+  for(const a of Object.values(u.agents||{}))if(Array.isArray(a.players))a.players=a.players.filter(id=>!LEGACY_DEMO_IDS.has(String(id).toUpperCase()));
+  u.meta={...(u.meta||{}),demoCleanupVersion:1};
+  return u;
+}
+function defaultUsers(){return {meta:{demoCleanupVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:0,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
 function loadUsersFile(){
   const defaults=defaultUsers();
   try{
-    const u=JSON.parse(fs.readFileSync(usersFile,'utf8'))||{};
-    const merged={
-      ...u,
-      superMaster:u.superMaster||defaults.superMaster,
-      superMasters:{...defaults.superMasters,...(u.superMasters||{})},
-      masters:{...defaults.masters,...(u.masters||{})},
-      agents:{...defaults.agents,...(u.agents||{})},
-      players:{...defaults.players,...(u.players||{})}
-    };
+    const raw=JSON.parse(fs.readFileSync(usersFile,'utf8'))||{};
+    const u=purgeLegacyDemoUsers(raw);
+    const merged={...u,meta:{...defaults.meta,...(u.meta||{})},superMaster:u.superMaster||defaults.superMaster,superMasters:{...defaults.superMasters,...(u.superMasters||{})},masters:{...defaults.masters,...(u.masters||{})},agents:{...defaults.agents,...(u.agents||{})},players:{...defaults.players,...(u.players||{})}};
     try{fs.writeFileSync(usersFile,JSON.stringify(merged,null,2))}catch{}
     return merged;
   }catch{}
   try{fs.writeFileSync(usersFile,JSON.stringify(defaults,null,2))}catch{}
   return defaults;
 }
-function saveUsersFile(u){const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(u,null,2));fs.renameSync(tmp,usersFile)}
+function saveUsersFile(u){const clean=purgeLegacyDemoUsers(u);const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));fs.renameSync(tmp,usersFile)}
 function publicUser(u){if(!u)return null;const {pass,...safe}=u;return safe}
 function findAccount(username,password){
   const id=String(username||'').trim().toUpperCase();

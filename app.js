@@ -12,10 +12,13 @@ const AUDIT_KEY = 'antpro_audit_v1';
 const PASS_KEY = 'antpro_master_pass';
 const USERS_KEY = 'antpro_users_v2';
 const USERS_DIRTY_KEY = 'antpro_users_dirty_v1';
+const USERS_CLEANUP_KEY = 'antpro_demo_cleanup_v1';
+const LEGACY_DEMO_IDS = new Set(['SUPER','SM001','MASTER2','A1001','A1002','P2001','P2002','P2003']);
 let usersSaveChain = Promise.resolve();
 function readSessionUser(){
   try{
     const user=JSON.parse(sessionStorage.getItem('antpro_user')||'null');
+    if(user&&user.id&&LEGACY_DEMO_IDS.has(String(user.id).toUpperCase())){sessionStorage.removeItem('antpro_user');return null}
     return user&&user.id&&user.role?user:null;
   }catch{
     sessionStorage.removeItem('antpro_user');
@@ -32,32 +35,33 @@ function roleFromPath(){
 }
 function loginPath(role){return role==='supermaster'?'/supermaster-login':role==='master'?'/master-login':role==='agent'?'/agent-login':'/login'}
 
-/* Hierarchy demo data — Master creates Agents; Agents manage Players */
+/* Clean starting store — Master creates all later hierarchy records */
 function defaultUsers(){
   return {
-    superMaster: {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'},
-    superMasters: {
-      'SUPER': {id:'SUPER', name:'Super Master', role:'supermaster', pass:'super123', chips:0, parentMasterId:'MASTER', status:'active'}
-    },
-    masters: {
-      'MASTER': {id:'MASTER', name:'Master One', role:'master', pass:'master123', chips:100000, commission:5, share:95, superId:'SUPER', agents:['A1001','A1002'], status:'active'},
-      'MASTER2': {id:'MASTER2', name:'Master Two', role:'master', pass:'master123', chips:80000, commission:5, share:95, superId:'SUPER', agents:[], status:'active'}
-    },
-    agents: {
-      'A1001': {id:'A1001', name:'Agent-01', role:'agent', pass:'agent123', chips:50000, commission:10, share:20, masterId:'MASTER', superId:'SUPER', players:['P2001','P2002'], status:'active'},
-      'A1002': {id:'A1002', name:'Agent-02', role:'agent', pass:'agent123', chips:25000, commission:8, share:15, masterId:'MASTER', superId:'SUPER', players:['P2003'], status:'active'}
-    },
-    players: {
-      'P2001': {id:'P2001', name:'Player One', role:'player', pass:'play123', chips:5000, agentId:'A1001', status:'active'},
-      'P2002': {id:'P2002', name:'Player Two', role:'player', pass:'play123', chips:3200, agentId:'A1001', status:'active'},
-      'P2003': {id:'P2003', name:'Player Three', role:'player', pass:'play123', chips:1500, agentId:'A1002', status:'active'}
-    }
+    meta:{demoCleanupVersion:1},
+    superMaster:null,
+    superMasters:{},
+    masters:{'MASTER':{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:0,commission:0,share:100,agents:[],status:'active'}},
+    agents:{},
+    players:{}
   };
+}
+function sanitizeUserStore(data){
+  if(!data||typeof data!=='object')data=defaultUsers();
+  data.superMasters=data.superMasters||{};data.masters=data.masters||{};data.agents=data.agents||{};data.players=data.players||{};
+  if(data.meta&&data.meta.demoCleanupVersion===1)return data;
+  try{const old=localStorage.getItem(USERS_KEY);if(old&&!localStorage.getItem('antpro_users_backup_before_cleanup_v1'))localStorage.setItem('antpro_users_backup_before_cleanup_v1',old)}catch{}
+  if(data.superMaster&&LEGACY_DEMO_IDS.has(String(data.superMaster.id||'').toUpperCase()))data.superMaster=null;
+  for(const bucket of ['superMasters','masters','agents','players'])for(const id of Object.keys(data[bucket]))if(LEGACY_DEMO_IDS.has(String(id).toUpperCase())||LEGACY_DEMO_IDS.has(String(data[bucket][id]?.id||'').toUpperCase()))delete data[bucket][id];
+  for(const m of Object.values(data.masters))if(Array.isArray(m.agents))m.agents=m.agents.filter(id=>!LEGACY_DEMO_IDS.has(String(id).toUpperCase()));
+  for(const a of Object.values(data.agents))if(Array.isArray(a.players))a.players=a.players.filter(id=>!LEGACY_DEMO_IDS.has(String(id).toUpperCase()));
+  data.meta={...(data.meta||{}),demoCleanupVersion:1};
+  return data;
 }
 function loadUsers(){
   try{
     const raw=localStorage.getItem(USERS_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed&&parsed.superMaster)return parsed;}
+    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=sanitizeUserStore(parsed);localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
   }catch{}
   const d=defaultUsers();
   try{localStorage.setItem(USERS_KEY,JSON.stringify(d))}catch{}
@@ -91,7 +95,7 @@ async function syncUsersFromServer(){
     const local=loadUsers();
     if(localStorage.getItem(USERS_DIRTY_KEY)){await saveUsers(local);return local}
     const r=await fetch('/api/users',{cache:'no-store'});const d=await r.json();
-    if(d&&d.ok&&d.users&&d.users.superMaster){localStorage.setItem(USERS_KEY,JSON.stringify(d.users));return d.users}
+    if(d&&d.ok&&d.users&&(d.users.masters||d.users.agents||d.users.players||d.users.superMasters)){const clean=sanitizeUserStore(d.users);localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean}
   }catch(e){console.warn('users sync failed',e)}
   return loadUsers();
 }
@@ -99,9 +103,6 @@ function findAccount(username, password){
   const id=(username||'').trim().toUpperCase();
   const p=(password||'').trim();
   // Control accounts must not depend on a stale localStorage snapshot.
-  if(id==='SUPER' && p==='super123') return {id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,status:'active'};
-  if(id==='MASTER' && p==='master123') return {id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,status:'active'};
-  if((id==='A1001'||id==='A1002') && p==='agent123') return {id,name:id==='A1001'?'Agent-01':'Agent-02',role:'agent',pass:'agent123',chips:id==='A1001'?50000:25000,commission:id==='A1001'?10:8,share:id==='A1001'?20:15,masterId:'MASTER',players:[],status:'active'};
   const u=loadUsers();
   // Super Master
   if(u.superMaster && (u.superMaster.id.toUpperCase()===id || id==='SUPER' || id==='SUPERMASTER') && (p===u.superMaster.pass || p==='super123')){
