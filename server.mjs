@@ -69,14 +69,18 @@ async function fetchFirebaseLive(){
     return {live_matches:live_matches||{},meta:meta||{},newestUpdate:Math.max(newest,lastUpdate)};
   }catch{return null}
 }
+function cricketStamp(value){const n=Number(value)||0;return n>0&&n<1e12?n*1000:n}
+function splitCricketScore(value){const raw=String(value??'').trim();const parts=raw.split(/\s+[-–—]\s+/);const clean=x=>{const v=String(x||'').trim();return !v||v==='-'||v==='—'||v==='–'?'':v};return [clean(parts[0]),clean(parts[1])]}
 function normalizeFirebaseMatches(snapshot){
   return Object.entries(snapshot?.live_matches||{}).map(([id,m])=>{
     const teams=String(m?.teams||'Unknown v Unknown');
     const parts=teams.split(/\s+v(?:s)?\.?\s+/i);
     const score=String(m?.score||'');
-    const scoreParts=score.split(/\s+-\s+/);
-    const status=String(m?.status||'UPCOMING').toLowerCase();
-    return {id,name:teams,home:parts[0]||teams,away:parts.slice(1).join(' v ')||'',homeScore:scoreParts[0]&&scoreParts[0]!=='—'&&scoreParts[0]!=='-'?scoreParts[0]:'',awayScore:scoreParts[1]&&scoreParts[1]!=='—'&&scoreParts[1]!=='-'?scoreParts[1]:'',status,statusText:status,time:m?.updated_at?new Date(Number(m.updated_at)).toISOString():'',competition:m?.competition||'',live:status==='live',sessions:m?.sessions||{},overs:m?.overs||'',batsmen:Array.isArray(m?.batsmen)?m.batsmen:[],bowler:m?.bowler||'',bowlerStats:m?.bowler_stats||{},lastBalls:Array.isArray(m?.last_balls)?m.last_balls:[],innings:m?.innings||'',providerUpdatedAt:m?.updated_at||0};
+    const [homeScore,awayScore]=splitCricketScore(score);
+    const status=String(m?.status||'').toLowerCase();
+    const live=Boolean(m?.is_live)||status==='live'||status==='inplay'||status==='in progress';
+    const stamp=cricketStamp(m?.updated_at);
+    return {id,name:teams,home:parts[0]||teams,away:parts.slice(1).join(' v ')||'',homeScore,awayScore,score,status:live?'live':status||'upcoming',statusText:status||'upcoming',time:stamp?new Date(stamp).toISOString():'',competition:m?.competition||'',live,sessions:m?.sessions||{},overs:m?.overs||'',batsmen:Array.isArray(m?.batsmen)?m.batsmen:[],bowler:m?.bowler||'',bowlerStats:m?.bowler_stats||{},lastBalls:Array.isArray(m?.last_balls)?m.last_balls:[],innings:m?.innings||'',providerUpdatedAt:stamp};
   }).sort((a,b)=>{const rank=s=>s==='live'?0:s==='upcoming'?1:2;return rank(a.status)-rank(b.status)});
 }
 function firebaseIsFresh(snapshot){
@@ -122,7 +126,7 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/marquee'&&req.method==='GET')return json(res,200,{text:marquee});
   if(u.pathname==='/api/marquee'&&req.method==='POST'){const body=await readBody(req);const text=String(body.text||'').trim().slice(0,120);if(!text)return json(res,400,{ok:false,error:'text required'});marquee=text;persistMarquee();return json(res,200,{ok:true,text:marquee})}
   if(u.pathname==='/api/cricket/matches'&&req.method==='GET'){const feed=await fetchCricket();return json(res,feed.matches.length?200:502,{source:feed.source||'unknown',updated:feed.updated,matches:feed.matches,meta:feed.meta||null,error:feed.matches.length?null:'Live cricket feed unavailable'})}
-  if(u.pathname==='/api/cricket/sessions'&&req.method==='GET'){const feed=await fetchCricket();const matchName=u.searchParams.get('match')||'';if(!feed.matches.length)return json(res,502,{ok:false,error:'SportScore feed unavailable',sessions:[]});const match=feed.matches.find(m=>m.name===matchName);if(!match)return json(res,404,{ok:false,error:'Match not found',sessions:[]});return json(res,200,{ok:true,source:feed.source||'unknown',match:match.name,matchStatus:match.status,matchLive:match.live,updated:feed.updated,sessions:cricketSessions(match.name)})}
+  if(u.pathname==='/api/cricket/sessions'&&req.method==='GET'){const feed=await fetchCricket();const matchName=u.searchParams.get('match')||'';if(!feed.matches.length)return json(res,502,{ok:false,error:'SportScore feed unavailable',sessions:[]});const key=s=>String(s||'').toLowerCase().replace(/\s+vs?\.?\s+/g,' v ').replace(/\s+/g,' ').trim();const match=feed.matches.find(m=>key(m.name)===key(matchName));if(!match)return json(res,404,{ok:false,error:'Match not found',sessions:[]});return json(res,200,{ok:true,source:feed.source||'unknown',match:match.name,matchStatus:match.status,matchLive:match.live,updated:feed.updated,sessions:cricketSessions(match.name)})}
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const snap=await fetchFirebaseLive();if(!snap)return json(res,502,{ok:false,error:'firebase unavailable',live_matches:{},meta:{}});return json(res,200,{ok:true,live_matches:snap.live_matches||{},meta:snap.meta||{},newestUpdate:snap.newestUpdate||0})}
   if(u.pathname==='/api/live-rounds'&&req.method==='GET')return json(res,200,snapshot());
   if(u.pathname==='/api/live-bets'&&req.method==='GET'){const requested=u.searchParams.get('gameKey');const roundsNow=snapshot();const bets=liveBets.filter(b=>(!requested||b.gameKey===requested)&&roundsNow[b.gameKey]?.roundId===b.roundId);return json(res,200,{ok:true,bets})}

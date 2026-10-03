@@ -91,7 +91,10 @@ function hierarchyClientIds(data=loadUsers(), superId=''){
 }
 async function syncUsersFromServer(){
   try{
-    const r=await fetch('/api/users',{cache:'no-store'});
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),5000);
+    const r=await fetch('/api/users',{cache:'no-store',signal:controller.signal});
+    clearTimeout(timeout);
     const d=await r.json();
     if(d&&d.ok&&d.users&&d.users.masters?.MASTER){
       const merged=mergeUserStores(loadUsers(),d.users);
@@ -349,7 +352,13 @@ async function syncSharedRounds(){
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),1200);
     const r=await fetch('/api/live-rounds',{cache:'no-store',signal:controller.signal});clearTimeout(timeout);
     if(!r.ok)throw new Error('round api '+r.status);
-    const data=await r.json();state.sharedRounds=data;localStorage.setItem('antpro_live_rounds',JSON.stringify(data));
+    const data=await r.json();
+    state.sharedRounds=data;
+    const ab=data&&data['andar-bahar'];
+    if(ab&&Array.isArray(ab.previousResults)){
+      state.abHistory=ab.previousResults.map(x=>x==='Andar'?'A':x==='Bahar'?'B':x).filter(Boolean).slice(0,10);
+    }
+    localStorage.setItem('antpro_live_rounds',JSON.stringify(data));
     if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render();
   }catch{}
   finally{sharedSyncBusy=false}
@@ -790,7 +799,10 @@ async function doLogin(){
   const expected=state.loginRole||'player';
   let acc=null,serverLoginError='';
   try{
-    const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role:expected})});
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8000);
+    const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role:expected}),signal:controller.signal});
+    clearTimeout(timeout);
     const result=await response.json();
     if(response.ok){acc=result.user||null;if(result.token)sessionStorage.setItem('antpro_session_token',result.token)}else if(response.status===403)serverLoginError='Use the '+loginPath(result.role||'player')+' login page';
   }catch{}
@@ -886,8 +898,9 @@ function normalizeFirebaseMatch(id, m){
   const teams=String(m?.teams||'Unknown v Unknown');
   const parts=teams.split(/\s+v(?:s)?\.?\s+/i);
   const score=String(m?.score||'—');
-  const scoreParts=score.split(/\s+-\s+/);
+  const scoreParts=score.split(/\s+[-–—]\s+/).map(x=>{const v=String(x||'').trim();return !v||['-','—','–'].includes(v)?'':v});
   const status=String(m?.status||'').toLowerCase();
+  const live=Boolean(m?.is_live)||status==='live'||status==='inplay'||status==='in progress';
   return {
     id: String(id),
     name: teams,
@@ -896,11 +909,11 @@ function normalizeFirebaseMatch(id, m){
     homeScore: scoreParts[0]&&scoreParts[0]!=='—'?scoreParts[0]:'',
     awayScore: scoreParts[1]&&scoreParts[1]!=='—'?scoreParts[1]:'',
     score,
-    status,
+    status:live?'live':status||'upcoming',
     statusText: status,
     time: m?.updated_at ? new Date(m.updated_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
     competition: m?.competition||'',
-    live: status==='live',
+    live,
     sessions: m?.sessions||{},
     overs: m?.overs ?? m?.current_overs ?? '',
     batsmen: Array.isArray(m?.batsmen)?m.batsmen:(Array.isArray(m?.players)?m.players:[]),
@@ -1017,7 +1030,10 @@ async function fetchCricketSessions(matchName){
       if(state.view==='match')render();
       return;
     }
-    const res=await fetch('/api/cricket/sessions?match='+encodeURIComponent(matchName),{cache:'no-store'});
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),7000);
+    const res=await fetch('/api/cricket/sessions?match='+encodeURIComponent(matchName),{cache:'no-store',signal:controller.signal});
+    clearTimeout(timeout);
     if(!res.ok)throw new Error('session api '+res.status);
     const data=await res.json();state.liveSessions=data.sessions||[];state.liveSessionsKey=matchName;
   }catch(e){console.warn('session feed failed',e)}
