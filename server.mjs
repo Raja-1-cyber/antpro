@@ -14,6 +14,7 @@ fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
 const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:4,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:4,resultHold:5000}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
+const CRICBUZZ_LIVE_URL='https://www.cricbuzz.com/cricket-match/live-scores';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
 let marquee='🌹 JAI SHREE SHYAM 🌹';try{marquee=JSON.parse(fs.readFileSync(marqueeFile,'utf8')).text||marquee}catch{}
 let cricketCache={matches:[],updated:0,error:null};
@@ -59,6 +60,44 @@ function findAccount(username,password){
   return null;
 }
 async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+function buildSessionLines(matchName,isLive,score){
+  const over=Number((String(score||'').match(/\((\d+(?:\.\d+)?)\s*overs?/i)||[])[1]||0);
+  const seed=String(matchName||'').split('').reduce((n,c)=>n+c.charCodeAt(0),0);
+  const out={};
+  for(const target of [6,10,15,20]){
+    const key=`${target}_over`;
+    if(!isLive) out[key]={yes_run:'—',no_run:'—',status:'CLOSED'};
+    else if(over>=target) out[key]={yes_run:'—',no_run:'—',status:'SETTLED'};
+    else {const yes=target*7+((seed+target)%9),no=yes+1+((seed+target*3)%3);out[key]={yes_run:String(yes),no_run:String(no),status:'OPEN'};}
+  }
+  return out;
+}
+async function fetchCricbuzzLive(){
+  try{
+    const response=await fetch(CRICBUZZ_LIVE_URL,{headers:{'user-agent':'Mozilla/5.0 AntPro-LiveScore/1.0','accept':'text/html'}});
+    if(!response.ok)return [];
+    const html=(await response.text()).replace(/\\"/g,'"');
+    const pattern= /"matchInfo":\{([\s\S]*?)\},"matchScore":\{([\s\S]*?)\}\}\}/g;
+    const out=[],seen=new Set();let hit;
+    const pick=(text,key)=>{const m=text.match(new RegExp('"'+key+'":"?([^",}]+)'));return m?m[1]:''};
+    while((hit=pattern.exec(html))){
+      const info=hit[1],scoreBlock=hit[2],id=pick(info,'matchId');
+      const t1=(info.match(/"team1":\{[\s\S]*?"teamName":"([^"]+)"/)||[])[1]||'';
+      const t2=(info.match(/"team2":\{[\s\S]*?"teamName":"([^"]+)"/)||[])[1]||'';
+      if(!id||!t1||!t2||seen.has(id))continue;seen.add(id);
+      const state=pick(info,'state'),statusText=pick(info,'status')||pick(info,'shortStatus');
+      const live=/in progress|live|started|playing|stumps|opt to bat|day \d/i.test(`${state} ${statusText}`);
+      const stateLower=state.toLowerCase();
+      const status=live?'live':stateLower==='complete'?'finished':'upcoming';
+      const scoreFor=team=>{const m=scoreBlock.match(new RegExp('"'+team+'Score":\\{[\\s\\S]*?"runs":(\\d+),"wickets":(\\d+),"overs":([\\d.]+)'));return m?`${m[1]}/${m[2]} (${m[3]} overs)`:''};
+      const homeScore=scoreFor('team1'),awayScore=scoreFor('team2');
+      const scoreDisplay=homeScore&&awayScore?`${homeScore} - ${awayScore}`:homeScore||awayScore||'SCORE PENDING FROM PROVIDER';
+      const name=`${t1} v ${t2}`;
+      out.push({id:`cricbuzz-${id}`,name,home:t1,away:t2,homeScore,awayScore,score:`${homeScore}${awayScore?' - '+awayScore:''}`,scoreDisplay,status,statusText,time:'',competition:pick(info,'seriesName'),matchUrl:`${CRICBUZZ_LIVE_URL}/${id}`,live,sessions:buildSessionLines(name,live,homeScore||awayScore),overs:'',batsmen:[],bowler:'',bowlerStats:{},lastBalls:[],innings:'',providerUpdatedAt:Date.now()});
+    }
+    return out;
+  }catch{return []}
+}
 async function fetchFirebaseLive(){
   try{
     const [matchesRes,metaRes]=await Promise.all([
@@ -95,6 +134,8 @@ function snapshot(){const out={};for(const key of Object.keys(GAME_DEFS))out[key
 function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger']};return sides[key]?.includes(side)}
 async function fetchCricket(){
   if(Date.now()-cricketCache.updated<30000&&cricketCache.matches.length)return cricketCache;
+  const cricbuzz=await fetchCricbuzzLive();
+  if(cricbuzz.length){cricketCache={matches:cricbuzz,updated:Date.now(),source:'cricbuzz-live',error:null,meta:{provider:'Cricbuzz'}};return cricketCache;}
   const firebase=await fetchFirebaseLive();
   if(firebase&&firebaseIsFresh(firebase)){
     const matches=normalizeFirebaseMatches(firebase);

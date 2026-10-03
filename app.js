@@ -950,8 +950,12 @@ async function fetchLiveCricket(){
       const firebaseEntries=Object.entries(firebaseData.live_matches||{});
       const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>Math.max(max,Number(m?.updated_at)||0),0);
       const firebaseFresh=newestFirebaseUpdate>0 && (Date.now()-newestFirebaseUpdate)<120000;
-      if(firebaseFresh) list=firebaseEntries.map(([id,m])=>normalizeFirebaseMatch(id,m));
-      else console.warn('Ignoring stale Firebase scraper snapshot; using fresh cricket feed');
+      if(firebaseFresh){
+        const firebaseList=firebaseEntries.map(([id,m])=>normalizeFirebaseMatch(id,m));
+        const hasLiveScore=firebaseList.some(m=>m.live&&(m.homeScore||m.awayScore));
+        if(hasLiveScore||!firebaseList.some(m=>m.live)) list=firebaseList;
+        else console.warn('Firebase live snapshot has no numeric scores; using Cricbuzz/API fallback');
+      } else console.warn('Ignoring stale Firebase scraper snapshot; using fresh cricket feed');
     }
     if(!list.length){
       const res = await fetch('/api/cricket/matches',{cache:'no-store'});
@@ -964,7 +968,7 @@ async function fetchLiveCricket(){
         away: m.away||'',
         homeScore: m.homeScore ?? m.home_score ?? '',
         awayScore: m.awayScore ?? m.away_score ?? '',
-        scoreDisplay: (m.homeScore||m.home_score)&&(m.awayScore||m.away_score)?`${m.homeScore||m.home_score} - ${m.awayScore||m.away_score}`:'SCORE PENDING FROM PROVIDER',
+        scoreDisplay: (m.scoreDisplay&&m.scoreDisplay!=='SCORE PENDING FROM PROVIDER')?m.scoreDisplay:((m.homeScore||m.home_score)&&(m.awayScore||m.away_score)?`${m.homeScore||m.home_score} - ${m.awayScore||m.away_score}`:(m.homeScore||m.home_score||m.awayScore||m.away_score||'SCORE PENDING FROM PROVIDER')),
         status: (m.status||'').toLowerCase(),
         statusText: m.status_text||m.status||'',
         time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',

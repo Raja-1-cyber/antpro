@@ -81,9 +81,11 @@
           // Accept up to 15 min old (scraper can lag)
           var fresh = newest > 0 && (Date.now() - newest) < 900000;
           if (entries.length && (fresh || !list.length)) {
-            list = entries.map(function (pair) {
+            var firebaseList = entries.map(function (pair) {
               return normalizeFirebaseMatch(pair[0], pair[1]);
             });
+            var firebaseHasLiveScore = firebaseList.some(function (m) { return m.live && (m.homeScore || m.awayScore); });
+            if (firebaseHasLiveScore || !firebaseList.some(function (m) { return m.live; })) list = firebaseList;
           }
         }
       } catch (e1) {}
@@ -96,9 +98,10 @@
             var raw = await direct.json();
             var entries2 = Object.entries(raw || {});
             if (entries2.length) {
-              list = entries2.map(function (pair) {
+              var directList = entries2.map(function (pair) {
                 return normalizeFirebaseMatch(pair[0], pair[1]);
               });
+              if (directList.some(function (m) { return m.live && (m.homeScore || m.awayScore); }) || !directList.some(function (m) { return m.live; })) list = directList;
             }
           }
         } catch (e2) {}
@@ -118,6 +121,7 @@
                 away: m.away || '',
                 homeScore: m.homeScore != null ? m.homeScore : (m.home_score || ''),
                 awayScore: m.awayScore != null ? m.awayScore : (m.away_score || ''),
+                scoreDisplay: m.scoreDisplay || m.score || m.homeScore || m.awayScore || 'SCORE PENDING FROM PROVIDER',
                 status: String(m.status || '').toLowerCase(),
                 statusText: m.statusText || m.status_text || m.status || '',
                 time: m.time || '',
