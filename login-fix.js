@@ -179,7 +179,14 @@
       var acc = null;
       var fromServer = false;
 
-      // LOCAL first (instant)
+      // First hydrate the server-backed account list. This removes the new-device race
+      // where a tap landed before /api/users finished replacing the empty local seed.
+      try {
+        if (typeof syncUsersFromServer === 'function') {
+          await withTimeout(syncUsersFromServer(), 1800);
+        }
+      } catch (syncErr) {}
+      // LOCAL next (instant after hydration), then the authenticated server route.
       acc = localFind(username, password);
 
       // SERVER with timeout
@@ -328,6 +335,8 @@
       if (state.loggedIn) return;
       // only when login fields exist
       if (!document.getElementById('loginUser')) return;
+      if (state._loginEventAt && Date.now() - state._loginEventAt < 700) return;
+      state._loginEventAt = Date.now();
       e.preventDefault();
       e.stopPropagation();
       if (typeof window.doLogin === 'function') window.doLogin();
@@ -343,6 +352,8 @@
       }
       if (!btn || state.loggedIn) return;
       if (!document.getElementById('loginUser')) return;
+      if (state._loginEventAt && Date.now() - state._loginEventAt < 700) return;
+      state._loginEventAt = Date.now();
       // prevent double-fire with click
       if (btn._loginTouch) return;
       btn._loginTouch = true;

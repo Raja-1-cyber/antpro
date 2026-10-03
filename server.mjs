@@ -7,20 +7,57 @@ const dataDir=path.join(root,'data');
 const roundsFile=path.join(dataDir,'live-rounds.json');
 const marqueeFile=path.join(dataDir,'marquee.json');
 const usersFile=path.join(dataDir,'users.json');
+const betsFile=path.join(dataDir,'live-bets.json');
 const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app';
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
-const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:4},'dragon-tiger':{duration:15,lockSeconds:4}};
+const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5},lucky7:{duration:15,lockSeconds:4},'teen-patti':{duration:20,lockSeconds:5},'dragon-tiger':{duration:15,lockSeconds:4}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
 let marquee='🌹 JAI SHREE SHYAM 🌹';try{marquee=JSON.parse(fs.readFileSync(marqueeFile,'utf8')).text||marquee}catch{}
 let cricketCache={matches:[],updated:0,error:null};
+let liveBets=[];try{liveBets=JSON.parse(fs.readFileSync(betsFile,'utf8'))||[]}catch{liveBets=[]}
 function persist(){const tmp=roundsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rounds,null,2));fs.renameSync(tmp,roundsFile)}
 function persistMarquee(){const tmp=marqueeFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify({text:marquee},null,2));fs.renameSync(tmp,marqueeFile)}
-function defaultUsers(){const sm={id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,parentMasterId:'MASTER'};return {superMaster:sm,superMasters:{SUPER:sm},masters:{MASTER:{id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,agents:['A1001','A1002']},MASTER2:{id:'MASTER2',name:'Master Two',role:'master',pass:'master123',chips:80000,commission:5,share:95,agents:[]}},agents:{A1001:{id:'A1001',name:'Agent-01',role:'agent',pass:'agent123',chips:50000,commission:10,share:20,masterId:'MASTER',superId:'SUPER',players:['P2001','P2002']},A1002:{id:'A1002',name:'Agent-02',role:'agent',pass:'agent123',chips:25000,commission:8,share:15,masterId:'MASTER',superId:'SUPER',players:['P2003']}},players:{P2001:{id:'P2001',name:'Player One',role:'player',pass:'play123',chips:5000,agentId:'A1001'},P2002:{id:'P2002',name:'Player Two',role:'player',pass:'play123',chips:3200,agentId:'A1001'},P2003:{id:'P2003',name:'Player Three',role:'player',pass:'play123',chips:1500,agentId:'A1002'}}};}
-function loadUsersFile(){try{const u=JSON.parse(fs.readFileSync(usersFile,'utf8'));if(u&&u.superMaster){if(!u.superMasters)u.superMasters={SUPER:u.superMaster};if(!u.masters)u.masters={};if(!u.agents)u.agents={};if(!u.players)u.players={};return u}}catch{}const d=defaultUsers();try{fs.writeFileSync(usersFile,JSON.stringify(d,null,2))}catch{}return d}
+function persistBets(){const tmp=betsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(liveBets.slice(0,2000),null,2));fs.renameSync(tmp,betsFile)}
+function defaultUsers(){const sm={id:'SUPER',name:'Super Master',role:'supermaster',pass:'super123',chips:0,parentMasterId:'MASTER'};return {superMaster:sm,superMasters:{SUPER:sm},masters:{MASTER:{id:'MASTER',name:'Master One',role:'master',pass:'master123',chips:100000,commission:5,share:95,agents:['A1001','A1002']},MASTER2:{id:'MASTER2',name:'Master Two',pass:'master123',role:'master',chips:80000,commission:5,share:95,agents:[]}},agents:{A1001:{id:'A1001',name:'Agent-01',role:'agent',pass:'agent123',chips:50000,commission:10,share:20,masterId:'MASTER',superId:'SUPER',players:['P2001','P2002']},A1002:{id:'A1002',name:'Agent-02',role:'agent',pass:'agent123',chips:25000,commission:8,share:15,masterId:'MASTER',superId:'SUPER',players:['P2003']}},players:{P2001:{id:'P2001',name:'Player One',role:'player',pass:'play123',chips:5000,agentId:'A1001'},P2002:{id:'P2002',name:'Player Two',role:'player',pass:'play123',chips:3200,agentId:'A1001'},P2003:{id:'P2003',name:'Player Three',role:'player',pass:'play123',chips:1500,agentId:'A1002'}}};}
+function loadUsersFile(){
+  const defaults=defaultUsers();
+  try{
+    const u=JSON.parse(fs.readFileSync(usersFile,'utf8'))||{};
+    const merged={
+      ...u,
+      superMaster:u.superMaster||defaults.superMaster,
+      superMasters:{...defaults.superMasters,...(u.superMasters||{})},
+      masters:{...defaults.masters,...(u.masters||{})},
+      agents:{...defaults.agents,...(u.agents||{})},
+      players:{...defaults.players,...(u.players||{})}
+    };
+    try{fs.writeFileSync(usersFile,JSON.stringify(merged,null,2))}catch{}
+    return merged;
+  }catch{}
+  try{fs.writeFileSync(usersFile,JSON.stringify(defaults,null,2))}catch{}
+  return defaults;
+}
 function saveUsersFile(u){const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(u,null,2));fs.renameSync(tmp,usersFile)}
+function publicUser(u){if(!u)return null;const {pass,...safe}=u;return safe}
+function findAccount(username,password){
+  const id=String(username||'').trim().toUpperCase();
+  const secret=String(password||'').trim();
+  if(!id||!secret)return null;
+  const users=loadUsersFile();
+  const buckets=[['superMaster','supermaster'],['superMasters','supermaster'],['masters','master'],['agents','agent'],['players','player']];
+  for(const [bucket,role] of buckets){
+    const rows=bucket==='superMaster'?[users.superMaster]:Object.values(users[bucket]||{});
+    for(const row of rows){
+      if(row&&String(row.id||'').toUpperCase()===id&&String(row.pass||'')===secret){
+        return {...row,role:row.role||role};
+      }
+    }
+  }
+  return null;
+}
 async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
 async function fetchFirebaseLive(){
   try{
@@ -45,7 +82,7 @@ function normalizeFirebaseMatches(snapshot){
     const scoreParts=score.split(/\s+-\s+/);
     const clean=v=>{const x=String(v??'').trim();return !x||x==='—'||x==='-'||x.toLowerCase()==='n/a'?'':x};
     const status=String(m?.status||'UPCOMING').toLowerCase();
-    return {id,name:teams,home:parts[0]||teams,away:parts.slice(1).join(' v ')||'',homeScore:clean(scoreParts[0]),awayScore:clean(scoreParts[1]),score,scoreDisplay:clean(scoreParts[0])&&clean(scoreParts[1])?`${clean(scoreParts[0])} - ${clean(scoreParts[1])}`:'SCORE PENDING FROM PROVIDER',status,statusText:status,time:m?.updated_at?new Date(Number(m.updated_at)).toISOString():'',competition:m?.competition||'',live:status==='live',sessions:m?.sessions||{},overs:m?.overs||'',batsmen:Array.isArray(m?.batsmen)?m.batsmen:[],bowler:m?.bowler||'',bowlerStats:m?.bowler_stats||{},lastBalls:Array.isArray(m?.last_balls)?m.last_balls:[],innings:m?.innings||'',providerUpdatedAt:m?.updated_at||0};
+    return {id,name:teams,home:parts[0]||teams,away:parts.slice(1).join(' v ')||'',homeScore:clean(scoreParts[0]),awayScore:clean(scoreParts[1]),score,scoreDisplay:clean(scoreParts[0])&&clean(scoreParts[1])?`${clean(scoreParts[0])} - ${clean(scoreParts[1])}`:'SCORE PENDING FROM PROVIDER',status,statusText:status,time:m?.updated_at?new Date(Number(m.updated_at)).toISOString():'',competition:m?.competition||'',homeLogo:m?.home_logo||'',awayLogo:m?.away_logo||'',competitionLogo:m?.competition_logo||'',matchUrl:m?.url||'',live:status==='live',sessions:m?.sessions||{},overs:m?.overs||m?.current_overs||'',batsmen:Array.isArray(m?.batsmen)?m.batsmen:(Array.isArray(m?.players)?m.players:[]),bowler:m?.bowler||m?.current_bowler||'',bowlerStats:m?.bowler_stats||m?.bowlerStats||{},lastBalls:Array.isArray(m?.last_balls)?m.last_balls:[],innings:m?.innings||'',providerUpdatedAt:m?.updated_at||0};
   }).sort((a,b)=>{const rank=s=>s==='live'?0:s==='upcoming'?1:2;return rank(a.status)-rank(b.status)});
 }
 function firebaseIsFresh(snapshot){
@@ -55,6 +92,7 @@ function firebaseIsFresh(snapshot){
 function newRound(key,seconds=GAME_DEFS[key]?.duration||30){const def=GAME_DEFS[key]||{duration:seconds,lockSeconds:4};const r={gameKey:key,roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:seconds,duration:seconds,lockSeconds:def.lockSeconds,forcedWinner:null,startedAt:Date.now()};rounds[key]=r;persist();return r}
 function currentRound(key){const def=GAME_DEFS[key]||{duration:30,lockSeconds:4};let r=rounds[key]||newRound(key,def.duration);let elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);let lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds));if(r.phase==='betting'&&elapsed>=lockAt){r.phase='locked';r.timer=Math.max(0,(r.duration||def.duration)-elapsed);r.lockedAt=r.startedAt+lockAt*1000;persist()}if(r.phase==='locked'&&elapsed>=(r.duration||def.duration)){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds))}if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=7000){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds))}r.timer=Math.max(0,(r.duration||def.duration)-elapsed);r.betTimer=Math.max(0,lockAt-elapsed);return r}
 function snapshot(){const out={};for(const key of Object.keys(GAME_DEFS))out[key]={...currentRound(key)};return out}
+function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger']};return sides[key]?.includes(side)}
 async function fetchCricket(){
   if(Date.now()-cricketCache.updated<30000&&cricketCache.matches.length)return cricketCache;
   const firebase=await fetchFirebaseLive();
@@ -86,6 +124,14 @@ function readBody(req){return new Promise(resolve=>{let raw='';req.on('data',c=>
 function serveStatic(req,res,u){let rel=u.pathname==='/'?'index.html':u.pathname.replace(/^\//,'');let file=path.resolve(root,rel);if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())file=path.join(root,'index.html');try{const data=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'text/plain; charset=utf-8','Cache-Control':'no-cache'});res.end(data)}catch{res.writeHead(500);res.end('error')}}
 const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://localhost');try{
   if(u.pathname==='/api/health')return json(res,200,{ok:true,service:'antpro-demo',time:Date.now(),cricketFeed:'firebase-scraper-first'});
+  if(u.pathname==='/api/login'&&req.method==='POST'){
+    const body=await readBody(req);const account=findAccount(body.username??body.id,body.password??body.pass);
+    if(!account||account.status==='blocked'||account.status==='suspended')return json(res,401,{ok:false,error:account?'account blocked':'invalid credentials'});
+    const expected=String(body.role||'').toLowerCase();
+    if(expected&&expected!==String(account.role||'').toLowerCase())return json(res,403,{ok:false,error:'wrong role',user:publicUser(account)});
+    const token=Buffer.from(JSON.stringify({id:account.id,role:account.role,iat:Date.now()})).toString('base64url');
+    return json(res,200,{ok:true,user:publicUser(account),token});
+  }
   if(u.pathname==='/api/marquee'&&req.method==='GET')return json(res,200,{text:marquee});
   if(u.pathname==='/api/marquee'&&req.method==='POST'){const body=await readBody(req);const text=String(body.text||'').trim().slice(0,120);if(!text)return json(res,400,{ok:false,error:'text required'});marquee=text;persistMarquee();return json(res,200,{ok:true,text:marquee})}
   if(u.pathname==='/api/cricket/matches'&&req.method==='GET'){const feed=await fetchCricket();return json(res,feed.matches.length?200:502,{source:feed.source||'unknown',updated:feed.updated,matches:feed.matches,meta:feed.meta||null,error:feed.matches.length?null:'Live cricket feed unavailable'})}
@@ -95,8 +141,26 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(force&&req.method==='POST'){const key=decodeURIComponent(force[1]);const body=await readBody(req);const r=currentRound(key);if(!GAME_DEFS[key]||typeof body.side!=='string')return json(res,400,{ok:false,error:'invalid game or side'});r.forcedWinner=body.side;rounds[key]=r;persist();return json(res,200,{ok:true,round:r})}
   const fresh=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/new$/);
   if(fresh&&req.method==='POST'){const key=decodeURIComponent(fresh[1]);if(!GAME_DEFS[key])return json(res,404,{ok:false,error:'unknown game'});return json(res,200,{ok:true,round:newRound(key,GAME_DEFS[key].duration)})}
+  const result=u.pathname.match(/^\/api\/live-rounds\/([^/]+)\/result$/);
+  if(result&&req.method==='POST'){
+    const key=decodeURIComponent(result[1]);const body=await readBody(req);const winner=String(body.winner||'');
+    if(!GAME_DEFS[key]||!resultSideValid(key,winner))return json(res,400,{ok:false,error:'invalid result'});
+    const r=currentRound(key);r.phase='result';r.result=winner;r.resultAt=Date.now();r.timer=0;rounds[key]=r;persist();
+    return json(res,200,{ok:true,round:r});
+  }
   if(u.pathname==='/api/users'&&req.method==='GET'){return json(res,200,{ok:true,users:loadUsersFile(),savedAt:fs.statSync(usersFile).mtimeMs})}
-  if(u.pathname==='/api/users'&&req.method==='POST'){const body=await readBody(req);const users=body.users||body;if(!users||!users.superMaster)return json(res,400,{ok:false,error:'invalid users payload'});const normalized={...users,superMasters:users.superMasters||{SUPER:users.superMaster},masters:users.masters||{},agents:users.agents||{},players:users.players||{}};saveUsersFile(normalized);mirrorUsersToFirebase(normalized);return json(res,200,{ok:true,savedAt:fs.statSync(usersFile).mtimeMs})}
+  if(u.pathname==='/api/users'&&req.method==='POST'){const body=await readBody(req);const users=body.users||body;if(!users||typeof users!=='object')return json(res,400,{ok:false,error:'invalid users payload'});const base=loadUsersFile();const normalized={...base,...users,superMaster:users.superMaster||base.superMaster,superMasters:users.superMasters||base.superMasters,masters:users.masters||{},agents:users.agents||{},players:users.players||{}};saveUsersFile(normalized);mirrorUsersToFirebase(normalized);return json(res,200,{ok:true,savedAt:fs.statSync(usersFile).mtimeMs})}
+  if(u.pathname==='/api/live-bets'&&req.method==='GET')return json(res,200,{ok:true,bets:liveBets.slice(0,500)});
+  if(u.pathname==='/api/live-bets'&&req.method==='POST'){
+    const body=await readBody(req);if(!body.player||!body.gameKey||!body.roundId)return json(res,400,{ok:false,error:'gameKey, roundId and player required'});
+    const bet={...body,id:String(body.id||'B'+Date.now().toString(36).toUpperCase()),status:body.status||'open',ts:Number(body.ts)||Date.now()};
+    liveBets=liveBets.filter(x=>x.id!==bet.id);liveBets.unshift(bet);persistBets();return json(res,200,{ok:true,bet});
+  }
+  if(u.pathname==='/api/bets-settle'&&req.method==='POST'){
+    const body=await readBody(req);if(!body.id)return json(res,400,{ok:false,error:'bet id required'});
+    const current=liveBets.find(x=>x.id===body.id);const bet={...(current||{}),...body,status:body.status||current?.status||'pending',ts:Number(body.ts)||current?.ts||Date.now()};
+    liveBets=liveBets.filter(x=>x.id!==bet.id);liveBets.unshift(bet);persistBets();return json(res,200,{ok:true,bet});
+  }
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const data=await fetchFirebaseLive();if(!data)return json(res,502,{ok:false,error:'firebase unavailable'});return json(res,200,{ok:true,live_matches:data.live_matches,meta:data.meta,newestUpdate:data.newestUpdate,fresh:firebaseIsFresh(data)})}
   return serveStatic(req,res,u);
 }catch(err){console.error(err);return json(res,500,{ok:false,error:'server error'})}});

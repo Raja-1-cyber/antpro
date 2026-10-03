@@ -186,7 +186,8 @@ function ensureRound(gameKey){
 function sideTotalsFor(gameType, sides){
   const totals={};
   sides.forEach(s=>totals[s]=0);
-  state.activeBets.filter(b=>{
+  const bets=(state.serverBets&&state.serverBets.length?state.serverBets:state.activeBets)||[];
+  bets.filter(b=>{
     const t=(b.type||'').toLowerCase();
     if(gameType==='AndarBahar') return t==='andarbahar'||t.includes('andar');
     if(gameType==='LUCKY 7') return t.includes('lucky');
@@ -312,7 +313,7 @@ function tickRounds(){
     }
   }
 }
-setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
+window.__antproLegacyRoundTimer=setInterval(()=>{tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
 
 
 
@@ -330,6 +331,7 @@ const state={
   liveMatchesLoading: false,
   liveMatchesError: '',
   liveSessions: [], liveSessionsKey: '', liveSessionsLoading: false,
+  serverBets: [], liveBetsLoading: false,
   abJoker:null, abHistory:[], l7Card:{v:'7',s:'red',suit:'♥'}, l7Spin:false,
   tpPlayer:[{v:'A',s:'red',suit:'♥'},{v:'8',s:'',suit:'♣'},{v:'4',s:'red',suit:'♦'}], tpDealer:[{v:'K',s:'',suit:'♠'},{v:'6',s:'red',suit:'♥'},{v:'2',s:'',suit:'♣'}], tpSpin:false,
   dtDragon:{v:'8',s:'',suit:'♣'}, dtTiger:{v:'6',s:'',suit:'♣'}, dtSpin:false, resolving:{}, sharedRounds:{}
@@ -348,8 +350,22 @@ async function syncSharedRounds(){
   }catch{}
   finally{sharedSyncBusy=false}
 }
+let sharedBetsBusy=false;
+async function syncLiveBets(){
+  if(sharedBetsBusy)return;
+  sharedBetsBusy=true;state.liveBetsLoading=true;
+  try{
+    const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),2500);
+    const r=await fetch('/api/live-bets',{cache:'no-store',signal:controller.signal});clearTimeout(timeout);
+    if(r.ok){const d=await r.json();state.serverBets=Array.isArray(d.bets)?d.bets:[];}
+  }catch{}
+  finally{state.liveBetsLoading=false;sharedBetsBusy=false}
+  if(state.view==='admin'||state.view==='livebets')render();
+}
 setTimeout(syncSharedRounds,50);
-setInterval(syncSharedRounds,1000);
+window.__antproLegacyRoundSync=setInterval(syncSharedRounds,1000);
+setTimeout(syncLiveBets,150);
+window.__antproLiveBetsSync=setInterval(syncLiveBets,2500);
 
 (function initRoute(){
   const p=location.pathname.replace(/\/$/,'')||'/';
@@ -839,7 +855,7 @@ function home(){
   ];
   return `<div class="home-grid">${tiles.map(t=>`
     <div class="home-tile" onclick="go('${t.view}')">
-      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}.png" alt="${t.label}"></div>
+      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}.svg" alt="${t.label}"></div>
       <label>${t.label}</label>
     </div>`).join('')}</div>`;
 }
@@ -908,6 +924,7 @@ function normalizeFirebaseMatch(id, m){
     statusText: status,
     time: m?.updated_at ? new Date(m.updated_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
     competition: m?.competition||'',
+    homeLogo: m?.home_logo||m?.homeLogo||'', awayLogo: m?.away_logo||m?.awayLogo||'', competitionLogo: m?.competition_logo||m?.competitionLogo||'', matchUrl: m?.url||m?.matchUrl||'',
     live: status==='live',
     sessions: m?.sessions||{},
     overs: m?.overs ?? m?.current_overs ?? '',
@@ -952,6 +969,7 @@ async function fetchLiveCricket(){
         statusText: m.status_text||m.status||'',
         time: m.time ? new Date(m.time).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '',
         competition: m.competition||'',
+        homeLogo: m.homeLogo||m.home_logo||'', awayLogo: m.awayLogo||m.away_logo||'', competitionLogo: m.competitionLogo||m.competition_logo||'', matchUrl: m.url||m.matchUrl||'',
         overs: m.overs ?? m.current_overs ?? '',
         batsmen: Array.isArray(m.batsmen)?m.batsmen:(Array.isArray(m.players)?m.players:[]),
         bowler: m.bowler || m.current_bowler || '',
@@ -1148,13 +1166,13 @@ function casino(){
     <h3>Virtual Casino</h3>
     <div class="casino-grid virtual-grid">${virtual.map(([n,v,a])=>`
       <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.png" alt="${n}">
+        <img class="casino-art" src="/assets/casino-${a}.svg" alt="${n}">
       </div>`).join('')}</div>
     <h3>Live Casino</h3>
     <div class="casino-grid">${liveGames.map(([n,v,k,a])=>{
       const on=k?live[k]!==false:true;
       return `<div class="casino-tile ${on?'':'off'}" onclick="${on&&['andar','lucky7','teenpatti','dragontiger'].includes(v)?`go('${v}')`:'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.png" alt="${n}">
+        <img class="casino-art" src="/assets/casino-${a}.svg" alt="${n}">
       </div>`;
     }).join('')}</div>
   </div>${back()}`;
@@ -1773,7 +1791,8 @@ function agentAddChips(pid){
 
 
 function adminBetsFeed(){
-  const bets=state.activeBets.slice(0,30);
+  const source=(state.serverBets&&state.serverBets.length?state.serverBets:state.activeBets)||[];
+  const bets=source.slice(0,30);
   if(!bets.length)return '<p style="color:#8b949e;font-size:11px">Abhi koi bet nahi · players bet lagayenge to yahan live dikhega.</p>';
   return bets.map(b=>{
     const t=new Date(b.ts||Date.now()).toLocaleTimeString();
