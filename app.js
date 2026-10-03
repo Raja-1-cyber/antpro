@@ -313,7 +313,7 @@ function tickRounds(){
     if(r.phase==='locked'&&roundSeconds(key)<=0){ /* resolved by live-fix scheduler */ }
   }
 }
-setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()},1000);
+setInterval(()=>{if(!state.loggedIn)return;tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view)&&!Object.values(state.resolving||{}).some(Boolean)&&!state.andarSpinning&&!state.l7Spin&&!state.tpSpin&&!state.dtSpin)render()},1000);
 
 
 
@@ -346,6 +346,7 @@ async function syncControllerBets(){
 }
 async function syncSharedRounds(){
   if(!state.loggedIn||!['andar','lucky7','teenpatti','dragontiger'].includes(state.view))return;
+  if(Object.values(state.resolving||{}).some(Boolean)||state.andarSpinning||state.l7Spin||state.tpSpin||state.dtSpin)return;
   if(sharedSyncBusy)return;
   sharedSyncBusy=true;
   try{
@@ -934,7 +935,7 @@ async function fetchLiveCricket(){
     if(firebaseRes.ok){
       const firebaseData=await firebaseRes.json();
       const firebaseEntries=Object.entries(firebaseData.live_matches||{});
-      const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>Math.max(max,Number(m?.updated_at)||0),0);
+      const newestFirebaseUpdate=firebaseEntries.reduce((max,[,m])=>{const n=Number(m?.updated_at)||0;return Math.max(max,n>0&&n<1e12?n*1000:n)},0);
       const firebaseFresh=newestFirebaseUpdate>0 && (Date.now()-newestFirebaseUpdate)<120000;
       if(firebaseFresh) list=firebaseEntries.map(([id,m])=>normalizeFirebaseMatch(id,m));
       else console.warn('Ignoring stale Firebase scraper snapshot; using fresh cricket feed');
@@ -961,7 +962,7 @@ async function fetchLiveCricket(){
         lastBalls: Array.isArray(m.last_balls)?m.last_balls:(Array.isArray(m.lastBalls)?m.lastBalls:[]),
         innings: m.innings || '',
         providerUpdatedAt: m.updated_at || m.updatedAt || '',
-        live: (m.status||'').toLowerCase()==='live',
+        live: ['live','inplay','in progress'].includes((m.status||'').toLowerCase()) || Boolean(m.is_live),
         sessions: {}
       }));
     }
@@ -978,8 +979,8 @@ async function fetchLiveCricket(){
   state.liveMatchesLoading = false;
   if(state.view==='inplay'||state.view==='match') render();
 }
-// refresh every 45s when on inplay
-setInterval(()=>{ if(state.view==='inplay'||state.view==='match') fetchLiveCricket(); }, 45000);
+// refresh every 15s when on inplay so live score changes appear promptly
+setInterval(()=>{ if(state.view==='inplay'||state.view==='match') fetchLiveCricket(); }, 15000);
 
 
 const MATCHES=[
@@ -1011,7 +1012,7 @@ function inplay(){
       <div class="match-icons"><span>C</span><span>F</span><span>B</span></div>
       <div class="match-info">
         <div class="name">${m.name}</div>
-        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${m.homeScore&&m.awayScore?m.homeScore+' vs '+m.awayScore+' · ':((m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
+        <div class="time">${m.live||m.status==='live'?'● LIVE · ':''}${(m.homeScore||m.awayScore)?(m.homeScore||'—')+' vs '+(m.awayScore||'—')+' · ':((m.statusText&&m.statusText.toLowerCase()!=='live')?m.statusText+' · ':'')}${m.time||''} ${m.competition?'· '+m.competition:''}</div>
       </div>
     </div>`).join('')||'<div style="padding:20px;text-align:center;color:#888">No matches right now</div>'}</div>
   <div style="text-align:center;font-size:10px;color:#888;padding:10px">Kisi match pe tap karo → usi match ka scorecard + lines</div>
