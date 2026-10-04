@@ -182,7 +182,7 @@ function getGamesLive(){
   }
 }
 function setGamesLive(o){localStorage.setItem(GAMES_KEY,JSON.stringify(o))}
-function getMasterPass(){return localStorage.getItem(PASS_KEY)||'TEX99AdMIN@090'}
+function getMasterPass(){const saved=localStorage.getItem(PASS_KEY);return !saved||saved==='TEX99AdMIN@090'?'Game@1000':saved}
 const DEFAULT_MARQUEE='🌹 JAI SHREE SHYAM 🌹';
 function escapeHTML(value){return String(value||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function getMarquee(){return localStorage.getItem(MARQUEE_KEY)||DEFAULT_MARQUEE}
@@ -404,7 +404,7 @@ async function syncLiveBets(){
     }
   }catch{}
   finally{state.liveBetsLoading=false;sharedBetsBusy=false}
-  if(state.view==='admin'||state.view==='livebets')render();
+  if(state.view==='livebets')render();
 }
 setTimeout(syncSharedRounds,50);
 window.__antproLegacyRoundSync=setInterval(syncSharedRounds,1000);
