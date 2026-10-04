@@ -67,17 +67,38 @@ function normalizeCoinSupply(data){
   data.meta={...(data.meta||{}),fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1};
   return data;
 }
+function directShareChildren(data,parent){
+  if(!parent)return [];
+  const id=String(parent.id||'').toUpperCase(),role=parent.role;
+  if(role==='master')return [...Object.values(data.superMasters||{}),...Object.values(data.agents||{})].filter(x=>String(x.parentMasterId||x.masterId||'').toUpperCase()===id&&!x.superId);
+  if(role==='supermaster')return Object.values(data.agents||{}).filter(x=>String(x.superId||'').toUpperCase()===id);
+  if(role==='agent')return Object.values(data.players||{}).filter(x=>String(x.agentId||'').toUpperCase()===id);
+  return [];
+}
+function normalizeShareBalances(data){
+  data=data||defaultUsers();
+  const all=[...Object.values(data.masters||{}),...Object.values(data.superMasters||{}),...(data.superMaster?[data.superMaster]:[]),...Object.values(data.agents||{}),...Object.values(data.players||{})];
+  all.forEach(u=>{if(u.share==null)u.share=u.role==='master'?100:0;u.share=Math.max(0,Math.min(100,Number(u.share)||0))});
+  all.forEach(u=>{const used=directShareChildren(data,u).reduce((n,x)=>n+Math.max(0,Number(x.share)||0),0);u.shareAvailable=Math.max(0,Math.min(u.share,u.share-used));});
+  return data;
+}
+function availableShareFor(data,user){
+  if(!user)return 0;
+  normalizeShareBalances(data);
+  const found=(user.role==='master'?data.masters?.[user.id]:user.role==='supermaster'?(data.superMasters?.[user.id]||data.superMaster):user.role==='agent'?data.agents?.[user.id]:data.players?.[user.id]);
+  return Math.max(0,Number(found?.shareAvailable)||0);
+}
 function loadUsers(){
   try{
     const raw=localStorage.getItem(USERS_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=normalizeCoinSupply(sanitizeUserStore(parsed));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
+    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=normalizeShareBalances(normalizeCoinSupply(sanitizeUserStore(parsed)));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
   }catch{}
   const d=defaultUsers();
-  const clean=normalizeCoinSupply(d);try{localStorage.setItem(USERS_KEY,JSON.stringify(clean))}catch{}
+  const clean=normalizeShareBalances(normalizeCoinSupply(d));try{localStorage.setItem(USERS_KEY,JSON.stringify(clean))}catch{}
   return clean;
 }
 function saveUsers(u){
-  const snapshot=JSON.parse(JSON.stringify(normalizeCoinSupply(sanitizeUserStore(u))));
+  const snapshot=JSON.parse(JSON.stringify(normalizeShareBalances(normalizeCoinSupply(sanitizeUserStore(u)))));
   try{localStorage.setItem(USERS_KEY,JSON.stringify(snapshot));localStorage.setItem(USERS_DIRTY_KEY,String(Date.now()))}catch{}
   usersSaveChain=usersSaveChain.then(async()=>{
     try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:snapshot})});if(!r.ok)throw new Error('users save '+r.status);try{localStorage.removeItem(USERS_DIRTY_KEY)}catch{};return true}
@@ -442,6 +463,13 @@ function findUserById(id){
 }
 function updateUserFields(id, fields){
   const data=loadUsers(); const ID=(id||'').toUpperCase();
+  const target=mutableUser(data,ID);
+  if(fields&&fields.share!=null&&target){
+    const parent=mutableUser(data,directParentId(target,data));
+    const available=parent?availableShareFor(data,parent)+(Number(target.share)||0):Number(fields.share)||0;
+    if(Number(fields.share)<0||Number(fields.share)>available){toast('Parent ke available share se zyada nahi de sakte');return false}
+    fields={...fields,share:Number(fields.share)};
+  }
   let hit=false;
   if(data.superMasters){for(const k of Object.keys(data.superMasters)){if((data.superMasters[k].id||k).toUpperCase()===ID){Object.assign(data.superMasters[k],fields);hit=true;}}}
   if(data.superMaster&&(data.superMaster.id||'').toUpperCase()===ID){Object.assign(data.superMaster, fields); hit=true;}
@@ -1596,26 +1624,26 @@ function superCreateMaster(){
 function hierarchy(){
   const data=loadUsers();const role=state.user&&state.user.role;const root=hierarchyRoot(data);const supers=hierarchySuperMasters(data);const agents=role==='supermaster'?hierarchyAgents(data,state.user.id):Object.values(data.agents||{});
   const cards=role==='master'?supers.map(sm=>`<div class="agent-card"><div class="agent-avatar">S</div><div><button class="hierarchy-link" onclick="state.selectedSuper='${sm.id}';state.hierarchyLayer='agent';go('hierarchy-details')">${sm.id}</button><small>${sm.name||''} · Super Master</small><small style="display:block;color:#5c3d1e">Parent: ${sm.parentMasterId||root.id} · Comm ${sm.commission||0}%</small></div><div class="agent-coins">${(sm.chips||0).toLocaleString()}</div></div>`).join(''):agents.map(a=>`<div class="agent-card"><div class="agent-avatar">${(a.name||a.id||'?')[0]}</div><div><button class="hierarchy-link" onclick="state.selectedAgent='${a.id}';go('clientdetails')">${a.id}</button><small>${a.name||''} · ${(a.players||[]).length} clients</small><small style="display:block;color:#5c3d1e">Super: ${a.superId||'SUPER'} · Comm ${a.commission||0}% · Share ${a.share||0}%</small></div><div class="agent-coins">${(a.chips||0).toLocaleString()}</div></div>`).join('');
-  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" value="super123"><label>Commission %</label><input id="newSuperComm" type="number" value="5"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Commission %</label><input id="newAgentComm" type="number" value="10"><label>Share %</label><input id="newAgentShare" type="number" value="20"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
+  return `${topBtn()}<div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';go('hierarchy-details')">SUPER MASTER</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';go('hierarchy-details')">AGENTS</button><button class="blue-btn" onclick="state.hierarchyLayer='client';go('hierarchy-details')">CLIENTS</button></div><div class="view-title">MASTER → SUPER MASTER → AGENT → CLIENT</div><div class="master-card"><div class="role-chip">${role==='master'?'ROOT MASTER':'SUPER MASTER'}</div><div class="master-row"><strong>${role==='master'?root.id:(state.user&&state.user.id)||'SUPER'}</strong><span class="unlimited">${role==='master'?'Top-level control':'Under Root Master '+(root.id||'MASTER')}</span></div><p style="font-size:10px;color:#666;margin-top:6px">${role==='master'?'Root Master creates and controls Super Masters.':'Super Master creates and controls Agents; Agents manage Clients.'}</p></div><div class="agent-list"><div class="agent-heading">${role==='master'?'SUPER MASTERS':'AGENTS'} <span>${role==='master'?supers.length:agents.length}</span></div>${cards||'<div style="padding:12px;color:#888">No records yet</div>'}</div>${role==='master'?`<div class="view-title" style="margin-top:8px">CREATE SUPER MASTER</div><div class="form-box"><label>Super Master ID</label><input id="newSuperId" placeholder="e.g. SUPER2"><label>Name</label><input id="newSuperName" placeholder="Super Master name"><label>Password</label><input id="newSuperPass" value="super123"><label>Commission %</label><input id="newSuperComm" type="number" value="5"><label>Share % (available: ${availableShareFor(data,state.user)}%)</label><input id="newSuperShare" type="number" min="0" max="100" value="20"><label>Opening Chips</label><input id="newSuperChips" type="number" value="50000"><button class="btn-green" onclick="masterCreateSuperMaster()">CREATE SUPER MASTER</button></div>`:`<div class="view-title" style="margin-top:8px">CREATE AGENT UNDER ${state.user&&state.user.id}</div><div class="form-box"><label>Agent ID</label><input id="newAgentId" placeholder="e.g. A1003"><label>Name</label><input id="newAgentName" placeholder="Agent name"><label>Password</label><input id="newAgentPass" placeholder="Password"><label>Commission %</label><input id="newAgentComm" type="number" value="10"><label>Share % (available: ${availableShareFor(data,state.user)}%)</label><input id="newAgentShare" type="number" min="0" max="100" value="20"><label>Opening Chips</label><input id="newAgentChips" type="number" value="10000"><button class="btn-green" onclick="superCreateAgent()">CREATE AGENT</button></div>`}${back()}`;
 }
 async function masterCreateSuperMaster(){
   if(!state.user||state.user.role!=='master'){toast('Only Root Master');return}
-  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newSuperComm')||{}).value,10)||0;const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
+  const id=((document.getElementById('newSuperId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newSuperName')||{}).value||'').trim();const pass=((document.getElementById('newSuperPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newSuperComm')||{}).value,10)||0;const share=Math.max(0,Math.min(100,parseInt((document.getElementById('newSuperShare')||{}).value,10)||0));const chips=parseInt((document.getElementById('newSuperChips')||{}).value,10)||0;
   if(!id||!pass){toast('Super ID + Password required');return}
   const data=loadUsers(),parent=mutableUser(data,state.user.id);if(!data.superMasters)data.superMasters={};if(data.superMasters[id]){toast('Super Master ID exists');return}
-  if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
-  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,parentMasterId:state.user.id,status:'active'};parent.chips-=chips;state.user={...state.user,chips:parent.chips};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));await saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE SUPER MASTER',id,`parent ${state.user.id} · ${chips} coins`);toast('Super Master '+id+' created with '+chips.toLocaleString()+' coins');render();
+  const available=availableShareFor(data,parent);if(share>available){toast('Master ke available share se zyada nahi de sakte');return}if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
+  data.superMasters[id]={id,name:name||id,role:'supermaster',pass,chips,commission:comm,share,shareAvailable:share,parentMasterId:state.user.id,status:'active'};parent.chips-=chips;parent.shareAvailable=available-share;state.user={...state.user,chips:parent.chips,shareAvailable:parent.shareAvailable};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));await saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE SUPER MASTER',id,`parent ${state.user.id} · ${chips} coins · share ${share}%`);toast('Super Master '+id+' created with '+chips.toLocaleString()+' coins · Share '+share+'%');render();
 }
 function superCreateAgent(){
   if(!state.user||state.user.role!=='supermaster'){toast('Only Super Master');return}
   const id=((document.getElementById('newAgentId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newAgentName')||{}).value||'').trim();const pass=((document.getElementById('newAgentPass')||{}).value||'').trim();const comm=parseInt((document.getElementById('newAgentComm')||{}).value,10)||0;const share=parseInt((document.getElementById('newAgentShare')||{}).value,10)||0;const chips=parseInt((document.getElementById('newAgentChips')||{}).value,10)||0;
   if(!id||!pass){toast('Agent ID + Password required');return}
   const data=loadUsers();if(!data.agents)data.agents={};if(data.agents[id]){toast('Agent ID exists');return}
-  const masterId=state.user.parentMasterId||'MASTER',parent=mutableUser(data,state.user.id);if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Super Master ke available coins se zyada nahi de sakte');return}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;
+  const masterId=state.user.parentMasterId||'MASTER',parent=mutableUser(data,state.user.id),available=availableShareFor(data,parent);if(share>available){toast('Super Master ke available share se zyada nahi de sakte');return}if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Super Master ke available coins se zyada nahi de sakte');return}
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,shareAvailable:share,masterId,superId:state.user.id,players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;parent.shareAvailable=available-share;state.user={...state.user,chips:parent.chips,shareAvailable:parent.shareAvailable};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));
   if(!data.masters)data.masters={};
   if(data.masters[masterId]){if(!Array.isArray(data.masters[masterId].agents))data.masters[masterId].agents=[];if(!data.masters[masterId].agents.includes(id))data.masters[masterId].agents.push(id)}
-  saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE AGENT',id,`super master ${state.user.id} · ${chips} coins`);toast('Agent '+id+' created');render();
+  saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});audit('CREATE AGENT',id,`super master ${state.user.id} · ${chips} coins · share ${share}%`);toast('Agent '+id+' created · Share '+share+'%');render();
 }
 function masterCreateAgent(){
   if(!state.user||state.user.role!=='master'){toast('Only Master');return;}
@@ -1628,8 +1656,8 @@ function masterCreateAgent(){
   if(!id||!pass){toast('ID + Password required');return;}
   const data=loadUsers();
   if(data.agents[id]){toast('Agent ID exists');return;}
-  const parent=mutableUser(data,state.user.id);if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
-  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,masterId:(state.user&&state.user.id)||'MASTER',superId:'',players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;
+  const parent=mutableUser(data,state.user.id),available=availableShareFor(data,parent);if(share>available){toast('Master ke available share se zyada nahi de sakte');return}if(chips<0||chips>Number(parent&&parent.chips||0)){toast('Master ke available coins se zyada nahi de sakte');return}
+  data.agents[id]={id,name:name||id,role:'agent',pass,chips,commission:comm,share,shareAvailable:share,masterId:(state.user&&state.user.id)||'MASTER',superId:'',players:[],status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;parent.shareAvailable=available-share;state.user={...state.user,chips:parent.chips,shareAvailable:parent.shareAvailable};sessionStorage.setItem('antpro_user',JSON.stringify(state.user));
   if(data.masters&&data.masters[state.user.id]){ if(!data.masters[state.user.id].agents) data.masters[state.user.id].agents=[]; if(!data.masters[state.user.id].agents.includes(id)) data.masters[state.user.id].agents.push(id); }
   saveUsers(data);
   addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});
@@ -1797,8 +1825,8 @@ function agentCreateClient(){
   const id=((document.getElementById('newClientId')||{}).value||'').trim().toUpperCase();const name=((document.getElementById('newClientName')||{}).value||'').trim();const pass=((document.getElementById('newClientPass')||{}).value||'').trim();const chips=parseInt((document.getElementById('newClientChips')||{}).value,10)||0;const share=parseInt((document.getElementById('newClientShare')||{}).value,10)||0;const commission=parseInt((document.getElementById('newClientComm')||{}).value,10)||0;const aid=role==='agent'?state.user.id:((document.getElementById('newClientAgent')||{}).value||'').trim().toUpperCase();
   if(!id||!name||!pass||!aid){toast('Client ID, name, password and Agent ID required');return}
   const data=loadUsers();if(data.players[id]){toast('Client ID already exists');return}if(!data.agents[aid]){toast('Agent not found');return}
-  const parent=data.agents[aid];if(chips<0||chips>Number(parent.chips||0)){toast('Agent ke available coins se zyada nahi de sakta');return}
-  data.players[id]={id,name,role:'player',pass,chips,share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;if(!parent.players)parent.players=[];parent.players.push(id);saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});state.createClient=false;toast('Client '+id+' created with '+chips.toLocaleString()+' coins');render();
+  const parent=data.agents[aid],available=availableShareFor(data,parent);if(share>available){toast('Agent ke available share se zyada nahi de sakta');return}if(chips<0||chips>Number(parent.chips||0)){toast('Agent ke available coins se zyada nahi de sakta');return}
+  data.players[id]={id,name,role:'player',pass,chips,share,shareAvailable:share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;parent.shareAvailable=available-share;if(!parent.players)parent.players=[];parent.players.push(id);if(state.user&&state.user.id===aid){state.user={...state.user,chips:parent.chips,shareAvailable:parent.shareAvailable};sessionStorage.setItem('antpro_user',JSON.stringify(state.user))}saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});state.createClient=false;toast('Client '+id+' created with '+chips.toLocaleString()+' coins · Share '+share+'%');render();
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());

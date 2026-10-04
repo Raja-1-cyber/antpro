@@ -42,12 +42,20 @@ function normalizeCoinSupply(u){
   const nonRoot=[...(u.superMaster?[u.superMaster]:[]),...Object.values(u.superMasters||{}),...Object.values(u.masters||{}).filter(x=>String(x.id).toUpperCase()!=='MASTER'),...Object.values(u.agents||{}),...Object.values(u.players||{})].reduce((n,x)=>n+Math.max(0,Math.floor(Number(x?.chips)||0)),0);
   u.masters.MASTER.chips=Math.max(0,COIN_SUPPLY-nonRoot);u.meta={...(u.meta||{}),fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1};return u;
 }
+function normalizeShareBalances(u){
+  u=u||defaultUsers();
+  const all=[...Object.values(u.masters||{}),...Object.values(u.superMasters||{}),...(u.superMaster?[u.superMaster]:[]),...Object.values(u.agents||{}),...Object.values(u.players||{})];
+  const children=parent=>{const id=String(parent?.id||'').toUpperCase();if(parent?.role==='master')return [...Object.values(u.superMasters||{}),...Object.values(u.agents||{})].filter(x=>String(x.parentMasterId||x.masterId||'').toUpperCase()===id&&!x.superId);if(parent?.role==='supermaster')return Object.values(u.agents||{}).filter(x=>String(x.superId||'').toUpperCase()===id);if(parent?.role==='agent')return Object.values(u.players||{}).filter(x=>String(x.agentId||'').toUpperCase()===id);return []};
+  all.forEach(x=>{x.share=Math.max(0,Math.min(100,Number(x.share??(x.role==='master'?100:0))||0))});
+  all.forEach(x=>{const used=children(x).reduce((n,c)=>n+Math.max(0,Number(c.share)||0),0);x.shareAvailable=Math.max(0,x.share-used)});
+  u.meta={...(u.meta||{}),shareSystemVersion:1};return u;
+}
 function defaultUsers(){return {meta:{demoCleanupVersion:1,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
 function loadUsersFile(){
   const defaults=defaultUsers();
   try{
     const raw=JSON.parse(fs.readFileSync(usersFile,'utf8'))||{};
-    const u=normalizeCoinSupply(purgeLegacyDemoUsers(raw));
+    const u=normalizeShareBalances(normalizeCoinSupply(purgeLegacyDemoUsers(raw)));
     const merged={...u,meta:{...defaults.meta,...(u.meta||{})},superMaster:u.superMaster||defaults.superMaster,superMasters:{...defaults.superMasters,...(u.superMasters||{})},masters:{...defaults.masters,...(u.masters||{})},agents:{...defaults.agents,...(u.agents||{})},players:{...defaults.players,...(u.players||{})}};
     try{fs.writeFileSync(usersFile,JSON.stringify(merged,null,2))}catch{}
     return merged;
@@ -55,7 +63,7 @@ function loadUsersFile(){
   try{fs.writeFileSync(usersFile,JSON.stringify(defaults,null,2))}catch{}
   return defaults;
 }
-function saveUsersFile(u){const clean=normalizeCoinSupply(purgeLegacyDemoUsers(u));const tmp=usersFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));fs.renameSync(tmp,usersFile)}
+function saveUsersFile(u){const clean=normalizeShareBalances(normalizeCoinSupply(purgeLegacyDemoUsers(u)));const tmp=usersFile+'.tmp',bak=usersFile+'.bak';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));if(fs.existsSync(usersFile))fs.copyFileSync(usersFile,bak);fs.renameSync(tmp,usersFile)}
 function publicUser(u){if(!u)return null;const {pass,...safe}=u;return safe}
 function findAccount(username,password){
   const id=String(username||'').trim().toUpperCase();
