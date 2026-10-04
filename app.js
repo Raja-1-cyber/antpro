@@ -323,6 +323,8 @@ function readStake(key){
 }
 function canPlaceBet(key){
   if(state.user&&isBlocked(state.user.id)){toast('Account blocked/suspended');return false}
+  if(state.user&&state.user.bettingBlocked){toast('Betting locked by account manager');return false}
+  if(state.user&&state.user.casinoBlocked&&GAME_KEYS.includes(key)){toast('Casino locked by account manager');return false}
   if(state.resolving[key]){toast('Current round result aa raha hai');return false}
   if(!bettingOpen(key)){toast('Betting locked — next round automatic start hoga');return false}
   state.resolving[key]=true;
@@ -1727,6 +1729,12 @@ function staffActionMenu(id){
   const actions=[['Deposit','deposit'],['Withdraw','withdraw'],['InActive','inactive'],['Block Betting','block'],['Block Casino','casino'],['Edit','edit'],['Statement','statement'],['Account Operations','account'],['Login Report','loginreport'],['Reset Password','reset'],['User Exposure','exposure']];
   return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal action-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>${u.id} ACTIONS</h3><div class="modal-subtitle">All actions affect demo coins/local state only.</div>${actions.map(([label,key])=>`<button class="modal-action" onclick="boAction('${id}','${key}')">${label}<span>›</span></button>`).join('')}<button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
 }
+function inlineUserActions(id){
+  const u=findUserById(id)||{id};
+  const blocked=u.status==='blocked',betLocked=!!u.bettingBlocked,casinoLocked=!!u.casinoBlocked;
+  const action=(label,key)=>`<button class="inline-action-btn" onclick="boAction('${id}','${key}')">${label}</button>`;
+  return `<div class="inline-actions"><div class="inline-actions-title">${escapeHTML(u.id||id)} QUICK ACTIONS</div><div class="inline-actions-grid">${action(blocked?'UNBLOCK USER':'BLOCK USER',blocked?'unblock':'block')}${action('CHANGE PASSWORD','changePassword')}${action(betLocked?'UNLOCK BETTING':'BETTING LOCKED',betLocked?'bettingUnlock':'bettingLock')}${action(casinoLocked?'UNLOCK CASINO':'CASINO LOCK',casinoLocked?'casinoUnlock':'casinoLock')}${action('EDIT USER','edit')}${action('DEPOSIT','deposit')}${action('WITHDRAW','withdraw')}${action('STATEMENT','statement')}${action('USER EXPOSURE','exposure')}</div></div>`;
+}
 function hierarchyPicker(){
   return `<div class="modal-overlay" onclick="if(event.target===this){state.staffModal='';render()}"><div class="staff-modal hierarchy-modal"><button class="modal-x" onclick="state.staffModal='';render()">×</button><h3>SELECT MASTER VIEW</h3><button class="modal-action" onclick="state.hierarchyLayer='super';state.staffModal='';go('hierarchy-details')">Super Master<span>›</span></button><button class="modal-action" onclick="state.hierarchyLayer='agent';state.staffModal='';go('hierarchy-details')">Agent Master<span>›</span></button><button class="modal-action" onclick="state.hierarchyLayer='client';state.staffModal='';go('hierarchy-details')">Client Master<span>›</span></button><button class="back-btn" onclick="state.staffModal='';render()">CLOSE</button></div></div>`;
 }
@@ -1825,8 +1833,12 @@ function boAction(id,action){
   if(action==='deposit'||action==='withdraw'){
     const n=parseInt(prompt((action==='deposit'?'Deposit':'Withdraw')+' chips for '+id,'500'),10);if(!n||n<0)return;
     const ok=action==='deposit'?transferChips(state.user.id,id,n,`Deposit to ${id}`):transferChips(id,state.user.id,n,`Withdraw from ${id}`);if(!ok)return;
-  }else if(action==='block'){setUserStatus(id,'blocked');toast('Demo betting blocked · '+id)}
+  }else if(action==='block'){setUserStatus(id,'blocked');toast('User blocked · '+id)}
+  else if(action==='unblock'){setUserStatus(id,'active');toast('User unblocked · '+id)}
   else if(action==='inactive'){setUserStatus(id,'suspended');toast('Demo user inactive · '+id)}
+  else if(action==='bettingLock'||action==='bettingUnlock'){updateUserFields(id,{bettingBlocked:action==='bettingLock'});audit(action.toUpperCase(),id);toast((action==='bettingLock'?'Betting locked · ':'Betting unlocked · ')+id)}
+  else if(action==='casinoLock'||action==='casinoUnlock'){updateUserFields(id,{casinoBlocked:action==='casinoLock'});audit(action.toUpperCase(),id);toast((action==='casinoLock'?'Casino locked · ':'Casino unlocked · ')+id)}
+  else if(action==='changePassword'){const next=prompt('New password for '+id,'');if(next===null)return;if(next.trim().length<4){toast('Password min 4 characters');return}if(updateUserFields(id,{pass:next.trim()})){audit('PASSWORD CHANGE',id);toast('Password changed · '+id)}}
   else if(action==='exposure'){openExposure(id);return}
   else if(action==='settlement'){audit('SETTLEMENT',id,'demo ledger settlement');toast('Demo settlement recorded · '+id)}
   else if(action==='edit'){editUserDetails(id);return}
@@ -1847,9 +1859,9 @@ function agentCreateClient(){
 }
 function expandableClientRow(p,i){
   const key='client:'+p.id,open=!!state.expandedRows[key];
-  const name=`<button class="hierarchy-link" onclick="state.expandedRows['${key}']=!state.expandedRows['${key}'];render()">${escapeHTML(p.name||p.id)}</button>`;
+  const name=`<button class="hierarchy-link" onclick="state.expandedRows['${key}']=!state.expandedRows['${key}'];render()">${escapeHTML(p.name||p.id)} <span class="down-arrow">${open?'▴':'▾'}</span></button>`;
   const row=`<tr><td>${i+1}</td><td>${escapeHTML(p.id)}</td><td>${name}</td><td>${escapeHTML(p.agentId||'—')}</td><td>${p.createdAt?p.createdAt.slice(0,10):'—'}</td><td>${p.share||0}%</td><td>••••</td><td><button class="blue-btn" onclick="openExposure('${p.id}')">${openExposureForUser(p.id).toLocaleString()}</button></td><td>${p.commission||0}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><button class="action-trigger" aria-label="Open actions for ${escapeHTML(p.id)}" onclick="state.staffModal='${p.id}';render()">${open?'−':'＋'}</button></td></tr>`;
-  return row+(open?`<tr class="detail-row"><td colspan="12"><b>${escapeHTML(p.name||p.id)}</b> · Share ${p.share||0}% · Commission ${p.commission||0}% · Chips ${(p.chips||0).toLocaleString()} · Status ${(p.status||'active').toUpperCase()}</td></tr>`:'');
+  return row+(open?`<tr class="detail-row"><td colspan="12"><b>${escapeHTML(p.name||p.id)}</b> · Share ${p.share||0}% · Commission ${p.commission||0}% · Chips ${(p.chips||0).toLocaleString()} · Status ${(p.status||'active').toUpperCase()}${inlineUserActions(p.id)}</td></tr>`:'');
 }
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
@@ -2068,7 +2080,8 @@ function hierarchyDetails(){
     rows=scopedClients().map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
   }
   const title=layer==='super'?'SUPER DETAILS':layer==='agent'?'AGENT DETAILS':'CLIENT DETAILS';
-  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><button class="hierarchy-link" onclick="state.staffModal='${r[0]}';render()">${escapeHTML(r[1])}</button></td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${r[0]}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty-cell">No records in this hierarchy scope</td></tr>'}</tbody></table></div>${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
+  const hierarchyRow=r=>{const key='hier:'+r[0],open=!!state.expandedRows[key];return `<tr><td>${escapeHTML(r[0])}</td><td><button class="hierarchy-link" onclick="state.expandedRows['${key}']=!state.expandedRows['${key}'];render()">${escapeHTML(r[1])} <span class="down-arrow">${open?'▴':'▾'}</span></button></td><td>${escapeHTML(r[2])}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="action-trigger" onclick="state.expandedRows['${key}']=!state.expandedRows['${key}'];render()">${open?'−':'＋'}</button></td></tr>${open?`<tr class="inline-action-row"><td colspan="8">${inlineUserActions(r[0])}</td></tr>`:''}`};
+  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(hierarchyRow).join('')||'<tr><td colspan="8" class="empty-cell">No records in this hierarchy scope</td></tr>'}</tbody></table></div>${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
 }
 
 /* ===== ROUTER ===== */
