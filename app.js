@@ -39,10 +39,10 @@ function loginPath(role){return role==='supermaster'?'/supermaster-login':role==
 /* Clean starting store — Master creates all later hierarchy records */
 function defaultUsers(){
   return {
-    meta:{demoCleanupVersion:1},
+    meta:{demoCleanupVersion:1,hierarchyResetVersion:2,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1},
     superMaster:null,
     superMasters:{},
-    masters:{'MASTER':{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:0,commission:0,share:100,agents:[],status:'active'}},
+    masters:{'MASTER':{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,shareAvailable:100,agents:[],status:'active'}},
     agents:{},
     players:{}
   };
@@ -91,7 +91,7 @@ function availableShareFor(data,user){
 function loadUsers(){
   try{
     const raw=localStorage.getItem(USERS_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){const clean=normalizeShareBalances(normalizeCoinSupply(sanitizeUserStore(parsed)));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
+    if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&(parsed.masters||parsed.agents||parsed.players||parsed.superMasters)){if(Number(parsed.meta?.hierarchyResetVersion||0)<2){const clean=normalizeShareBalances(normalizeCoinSupply(defaultUsers()));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean}const clean=normalizeShareBalances(normalizeCoinSupply(sanitizeUserStore(parsed)));localStorage.setItem(USERS_KEY,JSON.stringify(clean));return clean;}}
   }catch{}
   const d=defaultUsers();
   const clean=normalizeShareBalances(normalizeCoinSupply(d));try{localStorage.setItem(USERS_KEY,JSON.stringify(clean))}catch{}

@@ -64,7 +64,19 @@ function normalizeShareBalances(u){
   all.forEach(x=>{const used=children(x).reduce((n,c)=>n+Math.max(0,Number(c.share)||0),0);x.shareAvailable=Math.max(0,x.share-used)});
   u.meta={...(u.meta||{}),shareSystemVersion:1};return u;
 }
-function defaultUsers(){return {meta:{demoCleanupVersion:1,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
+function defaultUsers(){return {meta:{demoCleanupVersion:1,hierarchyResetVersion:2,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
+async function resetHierarchyOnce(){
+  if(String(process.env.RESET_HIERARCHY_ONCE||'')!=='1')return;
+  const marker=await durableRead('hierarchy_reset_v2');
+  if(marker?.completedAt){console.log('[AntPro] hierarchy reset v2 already completed');return}
+  if(!durableDb){console.error('[AntPro] hierarchy reset skipped: Firebase Admin credentials are required for a safe production reset');return}
+  const clean=defaultUsers();
+  const tmp=usersFile+'.reset.tmp';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));fs.renameSync(tmp,usersFile);
+  await durableDb.ref('antpro_state/users').set(clean);
+  await durableDb.ref('users').set(clean);
+  await durableDb.ref('antpro_state/hierarchy_reset_v2').set({completedAt:Date.now(),version:2,deletedBuckets:['superMaster','superMasters','agents','players']});
+  console.log('[AntPro] hierarchy reset v2 complete: Master only, 50,000,000 coins');
+}
 function loadUsersFile(){
   const defaults=defaultUsers();
   try{
@@ -262,4 +274,4 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const data=await fetchFirebaseLive();if(!data)return json(res,502,{ok:false,error:'firebase unavailable'});return json(res,200,{ok:true,live_matches:data.live_matches,meta:data.meta,newestUpdate:data.newestUpdate,fresh:firebaseIsFresh(data)})}
   return serveStatic(req,res,u);
 }catch(err){console.error(err);return json(res,500,{ok:false,error:'server error'})}});
-const port=Number(process.env.PORT||3000);await restoreDurableState();await restoreUsersFromFirebase();server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));
+const port=Number(process.env.PORT||3000);await resetHierarchyOnce();await restoreDurableState();await restoreUsersFromFirebase();server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));

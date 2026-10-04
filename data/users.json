@@ -3,7 +3,7 @@
     "demoCleanupVersion": 1,
     "fixedCoinSupply": 50000000,
     "coinSupplyVersion": 1,
-    "hierarchyResetVersion": 1,
+    "hierarchyResetVersion": 2,
     "shareSystemVersion": 1
   },
   "superMaster": null,

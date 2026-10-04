@@ -43,6 +43,7 @@ Render pe JSON env var se jayega.
 | `NODE_ENV` | `production` |
 | `FIREBASE_DATABASE_URL` | `https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app` |
 | `FIREBASE_CREDENTIALS_JSON` | Same complete service-account JSON used by the scraper |
+| `RESET_HIERARCHY_ONCE` | `1` for the first clean reset deploy only; remove it after the reset log confirms success |
 
 6. **Create Web Service** → URL milega: `https://antpro-web-xxxx.onrender.com`
 
@@ -91,6 +92,8 @@ Pushed N matches to Firebase
 Render's local filesystem is ephemeral. The website now stores users, virtual rounds, marquee text, and demo bet history in Firebase through the Admin SDK, in addition to the local `data/` backup files. Set both `FIREBASE_DATABASE_URL` and the complete `FIREBASE_CREDENTIALS_JSON` on the **web service** and the scraper. Never commit the service-account JSON.
 
 The Admin SDK writes under `antpro_state/` and `users/`; keep those paths server-only in Firebase Rules. On restart, the hierarchy is restored before the web server starts accepting requests.
+
+For the approved clean reset, temporarily set `RESET_HIERARCHY_ONCE=1` on the web service. The server deletes all existing Super Master, Agent, and Client records, keeps only `MASTER` with `50,000,000` coins, and writes a durable reset marker. It does not modify rounds, timers, game logic, marquee, scraper matches, or bet history. After the log says `hierarchy reset v2 complete`, remove the variable and redeploy.
 
 ---
 
