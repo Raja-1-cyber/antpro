@@ -32,7 +32,7 @@ Render pe JSON env var se jayega.
 |--------|--------|
 | Name | `antpro-web` |
 | Runtime | **Node** |
-| Build Command | `echo ok` |
+| Build Command | `npm install --omit=dev` |
 | Start Command | `node server.mjs` |
 | Instance | Free |
 
@@ -86,6 +86,12 @@ Scraper started | poll every 5.0s
 Pushed N matches to Firebase
 ```
 
+### Durable application state (required)
+
+Render's local filesystem is ephemeral. The website now stores users, virtual rounds, marquee text, and demo bet history in Firebase through the Admin SDK, in addition to the local `data/` backup files. Set both `FIREBASE_DATABASE_URL` and the complete `FIREBASE_CREDENTIALS_JSON` on the **web service** and the scraper. Never commit the service-account JSON.
+
+The Admin SDK writes under `antpro_state/` and `users/`; keep those paths server-only in Firebase Rules. On restart, the hierarchy is restored before the web server starts accepting requests.
+
 ---
 
 ## D. Firebase Rules (ek baar)
@@ -124,3 +130,5 @@ Realtime Database → Rules → Publish:
 2. Service 1: start `node server.mjs`
 3. Service 2: root `scraper`, start `python cricket_scraper.py`
 4. Same env vars
+
+Railway is only needed for the scraper if Render cannot run a background worker. The main site can remain on Render; both services share Firebase.

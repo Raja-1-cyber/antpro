@@ -357,7 +357,7 @@ const state={
   rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',adminError:'',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
-  welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
+  welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',expandedRows:{},agentMatchesReady:false,agentMatchesLoading:false,
   andarCards:{andar:[{v:'8',s:'red',suit:'♦'},{v:'3',s:'red',suit:'♦'}],bahar:[{v:'3',s:'',suit:'♣'},{v:'6',s:'',suit:'♣'}]}, andarSpinning:false,
   user: restoredUser,
   agentTab: 'players',
@@ -469,6 +469,13 @@ function updateUserFields(id, fields){
     const available=parent?availableShareFor(data,parent)+(Number(target.share)||0):Number(fields.share)||0;
     if(Number(fields.share)<0||Number(fields.share)>available){toast('Parent ke available share se zyada nahi de sakte');return false}
     fields={...fields,share:Number(fields.share)};
+  }
+  if(fields&&fields.chips!=null&&target){
+    const parent=mutableUser(data,directParentId(target,data));
+    const current=Math.max(0,Math.floor(Number(target.chips)||0));
+    const next=Math.max(0,Math.floor(Number(fields.chips)||0));
+    const extra=Math.max(0,next-current);
+    if(extra>0&&(!parent||Math.floor(Number(parent.chips)||0)<extra)){toast('Parent ke available coins se zyada nahi de sakte');return false}
   }
   let hit=false;
   if(data.superMasters){for(const k of Object.keys(data.superMasters)){if((data.superMasters[k].id||k).toUpperCase()===ID){Object.assign(data.superMasters[k],fields);hit=true;}}}
@@ -1838,13 +1845,24 @@ function agentCreateClient(){
   const parent=data.agents[aid],available=availableShareFor(data,parent);if(share>available){toast('Agent ke available share se zyada nahi de sakta');return}if(chips<0||chips>Number(parent.chips||0)){toast('Agent ke available coins se zyada nahi de sakta');return}
   data.players[id]={id,name,role:'player',pass,chips,share,shareAvailable:share,commission,agentId:aid,status:'active',createdAt:new Date().toISOString()};parent.chips-=chips;parent.shareAvailable=available-share;if(!parent.players)parent.players=[];parent.players.push(id);if(state.user&&state.user.id===aid){state.user={...state.user,chips:parent.chips,shareAvailable:parent.shareAvailable};sessionStorage.setItem('antpro_user',JSON.stringify(state.user))}saveUsers(data);addStatement({type:'TRANSFER_OUT',userId:parent.id,amount:-chips,note:`Opening coins to ${id}`,toUser:id,balance:parent.chips});addStatement({type:'TRANSFER_IN',userId:id,amount:chips,note:`Opening coins from ${parent.id}`,fromUser:parent.id,balance:chips});state.createClient=false;toast('Client '+id+' created with '+chips.toLocaleString()+' coins · Share '+share+'%');render();
 }
+function expandableClientRow(p,i){
+  const key='client:'+p.id,open=!!state.expandedRows[key];
+  const name=`<button class="hierarchy-link" onclick="state.expandedRows['${key}']=!state.expandedRows['${key}'];render()">${escapeHTML(p.name||p.id)}</button>`;
+  const row=`<tr><td>${i+1}</td><td>${escapeHTML(p.id)}</td><td>${name}</td><td>${escapeHTML(p.agentId||'—')}</td><td>${p.createdAt?p.createdAt.slice(0,10):'—'}</td><td>${p.share||0}%</td><td>••••</td><td><button class="blue-btn" onclick="openExposure('${p.id}')">${openExposureForUser(p.id).toLocaleString()}</button></td><td>${p.commission||0}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><button class="action-trigger" aria-label="Open actions for ${escapeHTML(p.id)}" onclick="state.staffModal='${p.id}';render()">${open?'−':'＋'}</button></td></tr>`;
+  return row+(open?`<tr class="detail-row"><td colspan="12"><b>${escapeHTML(p.name||p.id)}</b> · Share ${p.share||0}% · Commission ${p.commission||0}% · Chips ${(p.chips||0).toLocaleString()} · Status ${(p.status||'active').toUpperCase()}</td></tr>`:'');
+}
 function clientDetails(){
   const role=state.user&&state.user.role;if(!['agent','master','supermaster'].includes(role))return shell(home());
   const list=scopedClients();
-  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="state.createClient=true;render()">＋ CREATE</button><button class="blue-btn" onclick="render()">UPDATE LIST</button></div>${state.createClient?createClientForm():''}<div class="table-scroll"><table class="bo-table"><thead><tr><th>#</th><th>CODE</th><th>NAME</th><th>AGENT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>CLIENT COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map((p,i)=>`<tr><td>${i+1}</td><td>${p.id}</td><td>${p.name||'—'}</td><td>${p.agentId||'—'}</td><td>${p.createdAt?p.createdAt.slice(0,10):'09-09-2026'}</td><td>${p.share||20}%</td><td>••••</td><td><button class="blue-btn" onclick="openExposure('${p.id}')">${openExposureForUser(p.id).toLocaleString()}</button></td><td>${p.commission||10}%</td><td>${(p.chips||0).toLocaleString()}</td><td class="${p.status==='active'?'ok':'bad'}">${(p.status||'active').toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${p.id}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="12" class="empty-cell">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Blue plus opens Deposit · Withdraw · InActive · Block Betting · Block Casino · Edit · Statement · Account Operations · Login Report · Reset Password.</div>${state.staffModal?staffActionMenu(state.staffModal):''}${state.exposureUser?exposureModal(state.exposureUser):''}${back()}`;
+  return `${topBtn()}<div class="view-title">CLIENT DETAILS</div><div class="table-toolbar"><button class="blue-btn" onclick="state.createClient=true;render()">＋ CREATE</button><button class="blue-btn" onclick="render()">UPDATE LIST</button></div>${state.createClient?createClientForm():''}<div class="table-scroll"><table class="bo-table"><thead><tr><th>#</th><th>CODE</th><th>NAME</th><th>AGENT</th><th>D.O.J</th><th>SHARE%</th><th>PWD</th><th>EXPOSURE</th><th>CLIENT COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${list.map(expandableClientRow).join('')||'<tr><td colspan="12" class="empty-cell">No clients in this hierarchy</td></tr>'}</tbody></table></div><div class="bo-footnote">Blue client names expand details. Blue plus opens Deposit · Withdraw · InActive · Block Betting · Block Casino · Edit · Statement · Account Operations · Login Report · Reset Password.</div>${state.staffModal?staffActionMenu(state.staffModal):''}${state.exposureUser?exposureModal(state.exposureUser):''}${back()}`;
 }
 
 /* ===== AGENT PANEL ===== */
+function ensureAgentMatches(){
+  if(state.agentMatchesReady||state.agentMatchesLoading)return;
+  state.agentMatchesLoading=true;
+  fetch('/api/cricket/matches',{cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject(new Error('feed unavailable'))).then(d=>{state.liveMatches=Array.isArray(d.matches)?d.matches:[]}).catch(()=>{state.liveMatches=[]}).finally(()=>{state.agentMatchesLoading=false;state.agentMatchesReady=true;if(state.view==='home'&&state.user&&state.user.role==='agent')render()});
+}
 function agentHome(){
   const u=state.user;
   if(!u||u.role!=='agent') return shell(home());
@@ -1852,6 +1870,9 @@ function agentHome(){
   const agent=data.agents[u.id]||u;
   const playerIds=agent.players||[];
   const players=playerIds.map(id=>data.players[id]).filter(Boolean);
+  ensureAgentMatches();
+  const matches=state.liveMatches||[];
+  const matchRows=matches.length?matches.slice(0,8).map((m,i)=>`<div class="agent-match-row"><strong>${escapeHTML(m.name||`${m.home||''} v ${m.away||''}`)}</strong><span>${escapeHTML(m.scoreDisplay||m.score||'SCORE PENDING')}</span><button class="blue-btn" onclick="state.matchId=${i};go('match')">${m.live?'INPLAY':'DETAILS'}</button><button class="hierarchy-link" onclick="state.matchId=${i};go('match')">Details</button></div>`).join(''):`<div style="background:#fff;padding:12px;font-size:12px;color:#666;text-align:center">${state.agentMatchesLoading?'Loading live matches…':'No active matches right now'}</div>`;
   return `${topBtn()}
   <div class="hier-grid">
     <button class="hier-btn" onclick="go('ledger')"><span class="icon">📒</span><small>P/L</small></button>
@@ -1868,7 +1889,7 @@ function agentHome(){
     <div class="hier-stat"><span class="val">${(agent.chips||0).toLocaleString()}</span><span class="lbl">Chips</span></div>
   </div>
   <div class="section-bar">Active Matches</div>
-  <div style="background:#fff;padding:12px;font-size:12px;color:#666;text-align:center">No active matches right now</div>
+  <div class="agent-match-list">${matchRows}</div>
   ${back()}`;
 }
 function agentViewPlayer(pid){
@@ -2047,7 +2068,7 @@ function hierarchyDetails(){
     rows=scopedClients().map(p=>[p.id,p.name||'—',p.agentId||'—',p.share||0,p.commission||0,p.chips||0,p.status||'active']);
   }
   const title=layer==='super'?'SUPER DETAILS':layer==='agent'?'AGENT DETAILS':'CLIENT DETAILS';
-  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${r[0]}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty-cell">No records in this hierarchy scope</td></tr>'}</tbody></table></div>${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
+  return `${topBtn()}<div class="view-title">${title}</div><div class="table-toolbar"><button class="blue-btn" onclick="state.hierarchyLayer='super';render()">Super Master</button><button class="blue-btn" onclick="state.hierarchyLayer='agent';render()">Agent Master</button><button class="blue-btn" onclick="state.hierarchyLayer='client';render()">Client Master</button></div><div class="table-scroll"><table class="bo-table"><thead><tr><th>CODE</th><th>NAME</th><th>UPLINE</th><th>SHARE%</th><th>COMM%</th><th>C.CHIPS</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><button class="hierarchy-link" onclick="state.staffModal='${r[0]}';render()">${escapeHTML(r[1])}</button></td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${Number(r[5]).toLocaleString()}</td><td class="${r[6]==='active'?'ok':'bad'}">${String(r[6]).toUpperCase()}</td><td><button class="action-trigger" onclick="state.staffModal='${r[0]}';render()">＋</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty-cell">No records in this hierarchy scope</td></tr>'}</tbody></table></div>${state.staffModal?staffActionMenu(state.staffModal):''}${back()}`;
 }
 
 /* ===== ROUTER ===== */

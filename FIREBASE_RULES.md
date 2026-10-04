@@ -30,6 +30,11 @@ Console → Realtime Database → **Rules** tab → neeche poora paste → **Pub
         ".read": true,
         ".write": false
       }
+    },
+
+    "antpro_state": {
+      ".read": false,
+      ".write": false
     }
   }
 }
@@ -42,6 +47,7 @@ Console → Realtime Database → **Rules** tab → neeche poora paste → **Pub
 | `live_matches` | Public (site + app) | Sirf Admin SDK (scraper / server) |
 | `users` | Sirf authenticated web server | Sirf Admin SDK |
 | `meta` | Public | Sirf Admin SDK |
+| `antpro_state` | Sirf Admin SDK | Sirf Admin SDK |
 | baaki sab | Band | Band |
 
 Write client se nahi hota — scraper service account se hota hai. Safe for demo.

@@ -2,6 +2,8 @@
 
 Demo mobile betting portal (coins only) + live cricket scraper → Firebase.
 
+Users, virtual rounds, marquee text, and demo bet history are persisted through Firebase Admin so Render restarts do not erase them. Railway is optional for the scraper worker only.
+
 ## Repo
 https://github.com/Raja-1-cyber/antpro
 

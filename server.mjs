@@ -2,6 +2,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getDatabase } from 'firebase-admin/database';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const dataDir=path.join(root,'data');
 const roundsFile=path.join(dataDir,'live-rounds.json');
@@ -20,9 +22,21 @@ let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catc
 let marquee='🌹 JAI SHREE SHYAM 🌹';try{marquee=JSON.parse(fs.readFileSync(marqueeFile,'utf8')).text||marquee}catch{}
 let cricketCache={matches:[],updated:0,error:null};
 let liveBets=[];try{liveBets=JSON.parse(fs.readFileSync(betsFile,'utf8'))||[]}catch{liveBets=[]}
-function persist(){const tmp=roundsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rounds,null,2));fs.renameSync(tmp,roundsFile)}
-function persistMarquee(){const tmp=marqueeFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify({text:marquee},null,2));fs.renameSync(tmp,marqueeFile)}
-function persistBets(){const tmp=betsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(liveBets.slice(0,2000),null,2));fs.renameSync(tmp,betsFile)}
+let durableDb=null;
+try{
+  const raw=String(process.env.FIREBASE_CREDENTIALS_JSON||'').trim();
+  if(raw&&process.env.FIREBASE_DATABASE_URL){
+    const credential=cert(JSON.parse(raw));
+    const app=getApps().length?getApps()[0]:initializeApp({credential,databaseURL:process.env.FIREBASE_DATABASE_URL});
+    durableDb=getDatabase(app);
+    console.log('[AntPro] durable Firebase state enabled');
+  }else console.warn('[AntPro] durable Firebase state disabled: credentials or database URL missing');
+}catch(e){console.warn('[AntPro] Firebase Admin init failed:',e.message)}
+async function durableRead(key){try{return durableDb?await durableDb.ref(`antpro_state/${key}`).once('value').then(s=>s.val()):null}catch(e){console.warn('[AntPro] durable read failed:',e.message);return null}}
+function durableWrite(key,value){if(durableDb)durableDb.ref(`antpro_state/${key}`).set(value).catch(e=>console.warn('[AntPro] durable write failed:',e.message))}
+function persist(){const tmp=roundsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rounds,null,2));fs.renameSync(tmp,roundsFile);durableWrite('rounds',rounds)}
+function persistMarquee(){const value={text:marquee};const tmp=marqueeFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(value,null,2));fs.renameSync(tmp,marqueeFile);durableWrite('marquee',value)}
+function persistBets(){const value=liveBets.slice(0,2000);const tmp=betsFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(value,null,2));fs.renameSync(tmp,betsFile);durableWrite('bets',value)}
 const LEGACY_DEMO_IDS=new Set(['SUPER','SM001','MASTER2','A1001','A1002','P2001','P2002','P2003']);
 function purgeLegacyDemoUsers(u){
   if(!u||typeof u!=='object')u={};
@@ -63,7 +77,7 @@ function loadUsersFile(){
   try{fs.writeFileSync(usersFile,JSON.stringify(defaults,null,2))}catch{}
   return defaults;
 }
-function saveUsersFile(u){const clean=normalizeShareBalances(normalizeCoinSupply(purgeLegacyDemoUsers(u)));const tmp=usersFile+'.tmp',bak=usersFile+'.bak';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));if(fs.existsSync(usersFile))fs.copyFileSync(usersFile,bak);fs.renameSync(tmp,usersFile)}
+function saveUsersFile(u){const clean=normalizeShareBalances(normalizeCoinSupply(purgeLegacyDemoUsers(u)));const tmp=usersFile+'.tmp',bak=usersFile+'.bak';fs.writeFileSync(tmp,JSON.stringify(clean,null,2));if(fs.existsSync(usersFile))fs.copyFileSync(usersFile,bak);fs.renameSync(tmp,usersFile);durableWrite('users',clean)}
 function publicUser(u){if(!u)return null;const {pass,...safe}=u;return safe}
 function findAccount(username,password){
   const id=String(username||'').trim().toUpperCase();
@@ -81,11 +95,13 @@ function findAccount(username,password){
   }
   return null;
 }
-async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+async function mirrorUsersToFirebase(u){if(durableDb){try{await durableDb.ref('users').set(u);return}catch(e){console.warn('[AntPro] Firebase users mirror failed:',e.message)}}}
 function hasHierarchyUsers(u){return !!(u&&(u.superMaster||Object.keys(u.superMasters||{}).length||Object.keys(u.masters||{}).some(id=>String(id).toUpperCase()!=='MASTER')||Object.keys(u.agents||{}).length||Object.keys(u.players||{}).length))}
 function mergePersistentUsers(local,remote){return {meta:{...(local?.meta||{}),...(remote?.meta||{})},superMaster:remote?.superMaster||local?.superMaster||null,superMasters:{...(local?.superMasters||{}),...(remote?.superMasters||{})},masters:{...(local?.masters||{}),...(remote?.masters||{})},agents:{...(local?.agents||{}),...(remote?.agents||{})},players:{...(local?.players||{}),...(remote?.players||{})}}}
 async function restoreUsersFromFirebase(){
   const local=loadUsersFile();
+  const durable=await durableRead('users');
+  if(hasHierarchyUsers(durable)){const merged=mergePersistentUsers(local,durable);saveUsersFile(merged);console.log('[AntPro] restored hierarchy users from durable Firebase state');return}
   try{
     const r=await fetch(FIREBASE_DB+'/users.json',{signal:AbortSignal.timeout(6000)});
     if(!r.ok)return;
@@ -93,6 +109,12 @@ async function restoreUsersFromFirebase(){
     if(hasHierarchyUsers(remote)){const merged=mergePersistentUsers(local,remote);saveUsersFile(merged);if(hasHierarchyUsers(local))console.log('[AntPro] merged local and durable Firebase hierarchy users');else console.log('[AntPro] restored hierarchy users from durable Firebase backup');}
     else if(hasHierarchyUsers(local)&&!hasHierarchyUsers(remote))await mirrorUsersToFirebase(local);
   }catch(e){console.warn('[AntPro] durable user restore unavailable:',e.message)}
+}
+async function restoreDurableState(){
+  const [savedRounds,savedMarquee,savedBets]=await Promise.all([durableRead('rounds'),durableRead('marquee'),durableRead('bets')]);
+  if(savedRounds&&typeof savedRounds==='object')rounds=savedRounds;
+  if(savedMarquee?.text)marquee=String(savedMarquee.text).slice(0,120);
+  if(Array.isArray(savedBets))liveBets=savedBets.slice(0,2000);
 }
 function sessionOutcome(matchName,target,score){let h=0;for(const ch of `${matchName}|${target}|${score}`)h=(h*31+ch.charCodeAt(0))>>>0;return h%2?'YES':'NO'}
 function buildSessionLines(matchName,isLive,score){
@@ -164,7 +186,7 @@ function firebaseIsFresh(snapshot){
   return stamp>0&&(Date.now()-stamp)<120000;
 }
 function newRound(key,seconds=GAME_DEFS[key]?.duration||30){const def=GAME_DEFS[key]||{duration:seconds,lockSeconds:4};const r={gameKey:key,roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:seconds,duration:seconds,lockSeconds:def.lockSeconds,forcedWinner:null,startedAt:Date.now()};rounds[key]=r;persist();return r}
-function currentRound(key){const def=GAME_DEFS[key]||{duration:30,lockSeconds:4,resultHold:7000};let r=rounds[key]||newRound(key,def.duration);let elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);let lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds));if(r.phase==='betting'&&elapsed>=lockAt){r.phase='locked';r.timer=Math.max(0,(r.duration||def.duration)-elapsed);r.lockedAt=r.startedAt+lockAt*1000;persist()}if(r.phase==='locked'&&elapsed>=(r.duration||def.duration)){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds))}if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=(def.resultHold??7000)){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,(r.duration||def.duration)-(r.lockSeconds??def.lockSeconds))}r.timer=Math.max(0,(r.duration||def.duration)-elapsed);r.betTimer=Math.max(0,lockAt-elapsed);return r}
+function currentRound(key){const def=GAME_DEFS[key]||{duration:30,lockSeconds:4,resultHold:7000};let r=rounds[key];if(!r||Number(r.duration)!==def.duration||Number(r.lockSeconds)!==def.lockSeconds)r=newRound(key,def.duration);let elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);let lockAt=Math.max(0,def.duration-def.lockSeconds);if(r.phase==='betting'&&elapsed>=lockAt){r.phase='locked';r.timer=Math.max(0,def.duration-elapsed);r.lockedAt=r.startedAt+lockAt*1000;persist()}if(r.phase==='locked'&&elapsed>=def.duration){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,def.duration-def.lockSeconds)}if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=(def.resultHold??7000)){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,def.duration-def.lockSeconds)}r.duration=def.duration;r.lockSeconds=def.lockSeconds;r.timer=Math.max(0,def.duration-elapsed);r.betTimer=Math.max(0,lockAt-elapsed);return r}
 function snapshot(){const out={};for(const key of Object.keys(GAME_DEFS))out[key]={...currentRound(key)};return out}
 function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger']};return sides[key]?.includes(side)}
 async function fetchCricket(){
@@ -240,4 +262,4 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const data=await fetchFirebaseLive();if(!data)return json(res,502,{ok:false,error:'firebase unavailable'});return json(res,200,{ok:true,live_matches:data.live_matches,meta:data.meta,newestUpdate:data.newestUpdate,fresh:firebaseIsFresh(data)})}
   return serveStatic(req,res,u);
 }catch(err){console.error(err);return json(res,500,{ok:false,error:'server error'})}});
-const port=Number(process.env.PORT||3000);await restoreUsersFromFirebase();server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));
+const port=Number(process.env.PORT||3000);await restoreDurableState();await restoreUsersFromFirebase();server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));

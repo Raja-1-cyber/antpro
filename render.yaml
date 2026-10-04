@@ -4,7 +4,7 @@ services:
     name: antpro-web
     runtime: node
     plan: free
-    buildCommand: "echo 'static node app — no build'"
+    buildCommand: "npm install --omit=dev"
     startCommand: "node server.mjs"
     envVars:
       - key: NODE_ENV

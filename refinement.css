@@ -112,6 +112,13 @@
 /* Video-style hierarchy drill-down links */
 .hierarchy-link{display:block;padding:0;border:0;background:none;color:#0b66c3;text-decoration:underline;font-weight:800;font-size:12px;cursor:pointer;text-align:left}
 .hierarchy-link:active{color:#06457f}
+.detail-row td{background:#eef6fc;color:#244b6d;font-size:10px;padding:7px 6px;border-top:1px solid #b9d8ee}
+.agent-match-list{background:#fff;border-bottom:1px solid #ddd}
+.agent-match-row{display:grid;grid-template-columns:minmax(130px,1fr) minmax(70px,auto) auto auto;gap:6px;align-items:center;padding:8px 9px;border-bottom:1px solid #e5e5e5;font-size:10px}
+.agent-match-row strong{color:#173c63;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-match-row span{color:#666;white-space:nowrap;font-size:9px}
+.agent-match-row .blue-btn{padding:5px 7px;font-size:9px;white-space:nowrap}
+@media(max-width:390px){.agent-match-row{grid-template-columns:1fr auto;gap:5px}.agent-match-row span{grid-column:1}.agent-match-row .blue-btn,.agent-match-row .hierarchy-link{grid-row:1 / span 2}}
 
 /* Video scorecard parity: compact batting and bowling stat columns. */
 .video-scorecard-wrap{overflow-x:auto;background:#fff}
