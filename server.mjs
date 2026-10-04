@@ -60,7 +60,7 @@ function normalizeShareBalances(u){
   u=u||defaultUsers();
   const all=[...Object.values(u.masters||{}),...Object.values(u.superMasters||{}),...(u.superMaster?[u.superMaster]:[]),...Object.values(u.agents||{}),...Object.values(u.players||{})];
   const children=parent=>{const id=String(parent?.id||'').toUpperCase();if(parent?.role==='master')return [...Object.values(u.superMasters||{}),...Object.values(u.agents||{})].filter(x=>String(x.parentMasterId||x.masterId||'').toUpperCase()===id&&!x.superId);if(parent?.role==='supermaster')return Object.values(u.agents||{}).filter(x=>String(x.superId||'').toUpperCase()===id);if(parent?.role==='agent')return Object.values(u.players||{}).filter(x=>String(x.agentId||'').toUpperCase()===id);return []};
-  all.forEach(x=>{x.share=Math.max(0,Math.min(100,Number(x.share??(x.role==='master'?100:0))||0))});
+  all.forEach(x=>{if(x.role==='player'){x.share=0;x.commission=0}else x.share=Math.max(0,Math.min(100,Number(x.share??(x.role==='master'?100:0))||0))});
   all.forEach(x=>{const used=children(x).reduce((n,c)=>n+Math.max(0,Number(c.share)||0),0);x.shareAvailable=Math.max(0,x.share-used)});
   u.meta={...(u.meta||{}),shareSystemVersion:1};return u;
 }
