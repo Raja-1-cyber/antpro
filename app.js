@@ -543,12 +543,14 @@ function applyCascade(bet){
   const playerId=bet.player||bet.playerId; if(!playerId) return;
   const pl=findUserById(playerId); if(!pl||pl.role!=='player') return;
   const agent=pl.agentId?findUserById(pl.agentId):null;
-  const master=agent&&agent.masterId?findUserById(agent.masterId):null;
+  const supermaster=agent&&agent.superId?findUserById(agent.superId):null;
+  const master=supermaster&&supermaster.parentMasterId?findUserById(supermaster.parentMasterId):(agent&&agent.masterId?findUserById(agent.masterId):null);
   const amt=Number(bet.amt)||0;
   const profit=Number(bet.profit)||0;
   const won=bet.status==='won';
   const agentShare=Number(agent&&agent.share)||0;
-  const masterShare=Number(master&&master.share)||0;
+  const superShare=Number(supermaster&&supermaster.share)||0;
+  const masterShare=Number(supermaster?supermaster.share:(agent&&agent.share))||0;
   const agentCommPct=Number(agent&&agent.commission)||0;
   const lines=[];
   if(won){
@@ -558,6 +560,10 @@ function applyCascade(bet){
       if(cut){creditChips(agent.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:-cut, kind:'share_win'});}
       const comm=Math.floor(profit*(agentCommPct/100));
       if(comm){creditChips(agent.id, comm, 'Commission on win '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
+    }
+    if(supermaster){
+      const cut=Math.floor(profit*(superShare/100));
+      if(cut){creditChips(supermaster.id, -cut, 'Share pay win '+bet.type+' '+playerId); lines.push({who:supermaster.id, role:'supermaster', amount:-cut, kind:'share_win'});}
     }
     if(master){
       const cut=Math.floor(profit*(masterShare/100));
@@ -570,6 +576,10 @@ function applyCascade(bet){
       if(take){creditChips(agent.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:agent.id, role:'agent', amount:take, kind:'share_loss'});}
       const comm=Math.floor(amt*(agentCommPct/100));
       if(comm){creditChips(agent.id, comm, 'Commission on loss '+bet.type); lines.push({who:agent.id, role:'agent', amount:comm, kind:'commission'});}
+    }
+    if(supermaster){
+      const take=Math.floor(amt*(superShare/100));
+      if(take){creditChips(supermaster.id, take, 'Share on loss '+bet.type+' '+playerId); lines.push({who:supermaster.id, role:'supermaster', amount:take, kind:'share_loss'});}
     }
     if(master){
       const take=Math.floor(amt*(masterShare/100));
