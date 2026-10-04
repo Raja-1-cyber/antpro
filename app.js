@@ -354,7 +354,7 @@ window.__antproLegacyRoundTimer=setInterval(()=>{tickRounds();if(['andar','lucky
 const state={
   view:'home',menu:false,loggedIn:!location.pathname.toLowerCase().includes('login') && !!restoredUser,
   loginRole:roleFromPath(),
-  rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',
+  rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',adminError:'',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
   welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',
@@ -1982,8 +1982,9 @@ function admin(){
   if(!state.adminAuthed){
     return `<div class="admin-login"><div class="admin-box">
       <h3>Controller Access</h3>
-      <input type="password" id="adminPass" placeholder="Password" autocomplete="off">
+      <input type="password" id="adminPass" placeholder="Password" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();tryAdminLogin()}">
       <button onclick="tryAdminLogin()">Enter</button>
+      <div id="adminLoginError" style="min-height:16px;color:#f85149;font-size:10px;margin-top:8px">${escapeHTML(state.adminError||'')}</div>
       <p style="color:#8b949e;font-size:10px;margin-top:12px">Authorized only</p>
     </div></div>`;
   }
@@ -2016,8 +2017,14 @@ function admin(){
     <div class="admin-foot">/x9k2-ns-ctrl · AntPro UI · Libra controller logic</div>
   </div>`;
 }
-function tryAdminLogin(){const v=(document.getElementById('adminPass')||{}).value||'';if(v===getMasterPass()){state.adminAuthed=true;sessionStorage.setItem('antpro_admin_ok','1');render()}else toast('Wrong password')}
-function adminLogout(){state.adminAuthed=false;sessionStorage.removeItem('antpro_admin_ok');render()}
+function tryAdminLogin(){
+  const input=document.getElementById('adminPass');const v=(input&&input.value)||'';
+  if(v===getMasterPass()){state.adminError='';state.adminAuthed=true;sessionStorage.setItem('antpro_admin_ok','1');render();return}
+  state.adminError='Wrong password';
+  const error=document.getElementById('adminLoginError');if(error)error.textContent=state.adminError;
+  if(input){input.value='';input.focus()}
+}
+function adminLogout(){state.adminAuthed=false;state.adminError='';sessionStorage.removeItem('antpro_admin_ok');render()}
 function toggleGame(key){
   const PERMANENT = ['andar-bahar','lucky7','teen-patti','dragon-tiger'];
   if(PERMANENT.includes(key)){toast('Yeh game permanent hai — band nahi ho sakti');return;}
