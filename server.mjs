@@ -82,6 +82,18 @@ function findAccount(username,password){
   return null;
 }
 async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+function hasHierarchyUsers(u){return !!(u&&(u.superMaster||Object.keys(u.superMasters||{}).length||Object.keys(u.masters||{}).some(id=>String(id).toUpperCase()!=='MASTER')||Object.keys(u.agents||{}).length||Object.keys(u.players||{}).length))}
+function mergePersistentUsers(local,remote){return {meta:{...(local?.meta||{}),...(remote?.meta||{})},superMaster:remote?.superMaster||local?.superMaster||null,superMasters:{...(local?.superMasters||{}),...(remote?.superMasters||{})},masters:{...(local?.masters||{}),...(remote?.masters||{})},agents:{...(local?.agents||{}),...(remote?.agents||{})},players:{...(local?.players||{}),...(remote?.players||{})}}}
+async function restoreUsersFromFirebase(){
+  const local=loadUsersFile();
+  try{
+    const r=await fetch(FIREBASE_DB+'/users.json',{signal:AbortSignal.timeout(6000)});
+    if(!r.ok)return;
+    const remote=await r.json();
+    if(hasHierarchyUsers(remote)){const merged=mergePersistentUsers(local,remote);saveUsersFile(merged);if(hasHierarchyUsers(local))console.log('[AntPro] merged local and durable Firebase hierarchy users');else console.log('[AntPro] restored hierarchy users from durable Firebase backup');}
+    else if(hasHierarchyUsers(local)&&!hasHierarchyUsers(remote))await mirrorUsersToFirebase(local);
+  }catch(e){console.warn('[AntPro] durable user restore unavailable:',e.message)}
+}
 function sessionOutcome(matchName,target,score){let h=0;for(const ch of `${matchName}|${target}|${score}`)h=(h*31+ch.charCodeAt(0))>>>0;return h%2?'YES':'NO'}
 function buildSessionLines(matchName,isLive,score){
   const over=Number((String(score||'').match(/\((\d+(?:\.\d+)?)\s*overs?/i)||[])[1]||0);
@@ -228,4 +240,4 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if(u.pathname==='/api/firebase/live'&&req.method==='GET'){const data=await fetchFirebaseLive();if(!data)return json(res,502,{ok:false,error:'firebase unavailable'});return json(res,200,{ok:true,live_matches:data.live_matches,meta:data.meta,newestUpdate:data.newestUpdate,fresh:firebaseIsFresh(data)})}
   return serveStatic(req,res,u);
 }catch(err){console.error(err);return json(res,500,{ok:false,error:'server error'})}});
-const port=Number(process.env.PORT||3000);server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));
+const port=Number(process.env.PORT||3000);await restoreUsersFromFirebase();server.listen(port,'0.0.0.0',()=>console.log(`AntPro shared demo listening on ${port}`));
