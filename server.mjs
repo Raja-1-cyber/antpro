@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const dataDir=path.join(root,'data');
@@ -11,6 +12,20 @@ const betsFile=path.join(dataDir,'live-bets.json');
 const COIN_SUPPLY=50000000;
 const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-default-rtdb.asia-southeast1.firebasedatabase.app';
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
+const FIREBASE_CREDENTIALS=(()=>{try{return JSON.parse(process.env.FIREBASE_CREDENTIALS_JSON||'')}catch{return null}})();
+let firebaseAccessToken='',firebaseAccessTokenExp=0;
+const b64=v=>Buffer.from(v).toString('base64url');
+async function getFirebaseAccessToken(){
+  if(!FIREBASE_CREDENTIALS?.client_email||!FIREBASE_CREDENTIALS?.private_key)return '';
+  if(firebaseAccessToken&&Date.now()<firebaseAccessTokenExp-60000)return firebaseAccessToken;
+  const now=Math.floor(Date.now()/1000),header=b64(JSON.stringify({alg:'RS256',typ:'JWT'})),claim=b64(JSON.stringify({iss:FIREBASE_CREDENTIALS.client_email,scope:'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email',aud:FIREBASE_CREDENTIALS.token_uri||'https://oauth2.googleapis.com/token',iat:now,exp:now+3600}));
+  const signer=crypto.createSign('RSA-SHA256');signer.update(`${header}.${claim}`);signer.end();
+  const assertion=`${header}.${claim}.${signer.sign(FIREBASE_CREDENTIALS.private_key,'base64url')}`;
+  const tokenRes=await fetch(FIREBASE_CREDENTIALS.token_uri||'https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion}).toString(),signal:AbortSignal.timeout(8000)});
+  if(!tokenRes.ok)throw new Error(`firebase auth ${tokenRes.status}`);
+  const token=await tokenRes.json();firebaseAccessToken=token.access_token||'';firebaseAccessTokenExp=Date.now()+Number(token.expires_in||3600)*1000;return firebaseAccessToken;
+}
+async function firebaseFetch(pathname,options={}){const token=await getFirebaseAccessToken();const join=pathname.includes('?')?'&':'?';return fetch(`${FIREBASE_DB}${pathname}${token?`${join}access_token=${encodeURIComponent(token)}`:''}`,options)}
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
 const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:4,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:4,resultHold:5000}};
@@ -40,7 +55,7 @@ function purgeLegacyDemoUsers(u){
 function normalizeCoinSupply(u){
   const d=defaultUsers();u=u||{};u.masters=u.masters||{};if(!u.masters.MASTER)u.masters.MASTER={...d.masters.MASTER};
   const nonRoot=[...(u.superMaster?[u.superMaster]:[]),...Object.values(u.superMasters||{}),...Object.values(u.masters||{}).filter(x=>String(x.id).toUpperCase()!=='MASTER'),...Object.values(u.agents||{}),...Object.values(u.players||{})].reduce((n,x)=>n+Math.max(0,Math.floor(Number(x?.chips)||0)),0);
-  u.masters.MASTER.chips=Math.max(0,COIN_SUPPLY-nonRoot);u.meta={...(u.meta||{}),fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1};return u;
+  u.masters.MASTER.chips=Math.max(0,COIN_SUPPLY-nonRoot);u.meta={...(u.meta||{}),fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1,hierarchyResetVersion:1};return u;
 }
 function normalizeShareBalances(u){
   u=u||defaultUsers();
@@ -50,7 +65,7 @@ function normalizeShareBalances(u){
   all.forEach(x=>{const used=children(x).reduce((n,c)=>n+Math.max(0,Number(c.share)||0),0);x.shareAvailable=Math.max(0,x.share-used)});
   u.meta={...(u.meta||{}),shareSystemVersion:1};return u;
 }
-function defaultUsers(){return {meta:{demoCleanupVersion:1,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
+function defaultUsers(){return {meta:{demoCleanupVersion:1,fixedCoinSupply:COIN_SUPPLY,coinSupplyVersion:1,hierarchyResetVersion:1},superMaster:null,superMasters:{},masters:{MASTER:{id:'MASTER',name:'Master',role:'master',pass:'master123',chips:COIN_SUPPLY,commission:0,share:100,agents:[],status:'active'}},agents:{},players:{}};}
 function loadUsersFile(){
   const defaults=defaultUsers();
   try{
@@ -81,15 +96,16 @@ function findAccount(username,password){
   }
   return null;
 }
-async function mirrorUsersToFirebase(u){try{await fetch(FIREBASE_DB+'/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)})}catch(e){console.warn('firebase users mirror failed',e.message)}}
+async function mirrorUsersToFirebase(u){try{const r=await firebaseFetch('/users.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});if(!r.ok)throw new Error(`HTTP ${r.status}`)}catch(e){console.warn('firebase users mirror failed',e.message)}}
 function hasHierarchyUsers(u){return !!(u&&(u.superMaster||Object.keys(u.superMasters||{}).length||Object.keys(u.masters||{}).some(id=>String(id).toUpperCase()!=='MASTER')||Object.keys(u.agents||{}).length||Object.keys(u.players||{}).length))}
 function mergePersistentUsers(local,remote){return {meta:{...(local?.meta||{}),...(remote?.meta||{})},superMaster:remote?.superMaster||local?.superMaster||null,superMasters:{...(local?.superMasters||{}),...(remote?.superMasters||{})},masters:{...(local?.masters||{}),...(remote?.masters||{})},agents:{...(local?.agents||{}),...(remote?.agents||{})},players:{...(local?.players||{}),...(remote?.players||{})}}}
 async function restoreUsersFromFirebase(){
   const local=loadUsersFile();
   try{
-    const r=await fetch(FIREBASE_DB+'/users.json',{signal:AbortSignal.timeout(6000)});
+    const r=await firebaseFetch('/users.json',{signal:AbortSignal.timeout(6000)});
     if(!r.ok)return;
     const remote=await r.json();
+    if(Number(local?.meta?.hierarchyResetVersion||0)===1&&Number(remote?.meta?.hierarchyResetVersion||0)!==1){await mirrorUsersToFirebase(local);console.log('[AntPro] applied Master-only hierarchy reset to durable Firebase backup');return;}
     if(hasHierarchyUsers(remote)){const merged=mergePersistentUsers(local,remote);saveUsersFile(merged);if(hasHierarchyUsers(local))console.log('[AntPro] merged local and durable Firebase hierarchy users');else console.log('[AntPro] restored hierarchy users from durable Firebase backup');}
     else if(hasHierarchyUsers(local)&&!hasHierarchyUsers(remote))await mirrorUsersToFirebase(local);
   }catch(e){console.warn('[AntPro] durable user restore unavailable:',e.message)}
@@ -136,8 +152,8 @@ async function fetchCricbuzzLive(){
 async function fetchFirebaseLive(){
   try{
     const [matchesRes,metaRes]=await Promise.all([
-      fetch(FIREBASE_DB+'/live_matches.json',{signal:AbortSignal.timeout(8000)}),
-      fetch(FIREBASE_DB+'/meta/scraper.json',{signal:AbortSignal.timeout(8000)})
+      firebaseFetch('/live_matches.json',{signal:AbortSignal.timeout(8000)}),
+      firebaseFetch('/meta/scraper.json',{signal:AbortSignal.timeout(8000)})
     ]);
     if(!matchesRes.ok)return null;
     const live_matches=await matchesRes.json();
