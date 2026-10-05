@@ -905,7 +905,7 @@ function header(){
   const c=(u.role==='player'?getCoins():(u.chips||0)).toFixed(2);
   const label = u.role==='supermaster' ? `${u.id} (Super Master)` : u.role==='agent' ? `${u.id} (Agent)` : u.role==='master' ? `${u.id} (Master)` : `${u.id} (${u.name||''})`;
   return `<div class="topbar">
-    <div class="brand-logo"><img src="/assets/header-logo.png" alt="antpro"></div>
+    <div class="brand-logo"><img src="/assets/header-logo-4k-transparent.png" alt="antpro"></div>
     <div class="user"><strong>${label}</strong></div>
     <button class="header-menu" onclick="state.menu=true;render()" aria-label="Open menu">☰</button>
   </div>
