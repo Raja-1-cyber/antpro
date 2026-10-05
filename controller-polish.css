@@ -12,4 +12,7 @@
 .controller-status.result{background:#102f52;color:#7dd3fc}
 .controller-result{background:#172033;color:#a5b4fc;font-weight:600}
 .controller-force{background:#3d2508;color:#fbbf24}
+.controller-game-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 10px}
+.controller-tab{padding:8px 5px;border:1px solid #30363d;border-radius:5px;background:#111827;color:#9ca3af;font-size:10px;font-weight:700;cursor:pointer}
+.controller-tab.active{background:#123b63;border-color:#58a6ff;color:#fff}
 @media(max-width:390px){.admin-panel{padding:9px!important}.controller-bet-list{max-height:110px}}

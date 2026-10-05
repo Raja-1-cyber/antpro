@@ -214,12 +214,14 @@ function ensureRound(gameKey){
   }
   return all[gameKey];
 }
-function sideTotalsFor(gameType, sides){
+function sideTotalsFor(gameType, sides, roundKey){
   const totals={};
   sides.forEach(s=>totals[s]=0);
+  const round=roundKey?ensureRound(roundKey):null;
+  const roundStart=Number(round?.startedAt)||0;
   const merged=new Map();
   [...(state.activeBets||[]),...(state.serverBets||[])].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
-  const bets=Array.from(merged.values()).filter(b=>['open','pending'].includes(String(b.status||'open').toLowerCase()));
+  const bets=Array.from(merged.values()).filter(b=>['open','pending'].includes(String(b.status||'open').toLowerCase())&&(!roundStart||Number(b.ts||0)>=roundStart));
   bets.filter(b=>{
     const t=(b.type||'').toLowerCase();
     if(gameType==='AndarBahar') return t==='andarbahar'||t.includes('andar');
@@ -356,7 +358,7 @@ window.__antproLegacyRoundTimer=setInterval(()=>{tickRounds();if(['andar','lucky
 const state={
   view:'home',menu:false,loggedIn:!location.pathname.toLowerCase().includes('login') && !!restoredUser,
   loginRole:roleFromPath(),
-  rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',adminError:'',
+  rules:'hindi',toast:'',adminAuthed:sessionStorage.getItem('antpro_admin_ok')==='1',adminError:'',controllerGame:'andar-bahar',
   matchId:0,
   activeBets:JSON.parse(localStorage.getItem(BETS_KEY)||'[]'),
   welcome:false,createClient:false,staffModal:'',staffPage:1,pnlFrom:'2026-09-17',pnlTo:'2026-10-01',pnlType:'ALL',exposureUser:'',expandedRows:{},agentMatchesReady:false,agentMatchesLoading:false,
@@ -432,6 +434,15 @@ window.__antproLiveBetsSync=setInterval(syncLiveBets,2500);
 
 function toast(m,ms=1600){state.toast=m;render();setTimeout(()=>{state.toast='';render()},ms)}
 function saveBets(){localStorage.setItem(BETS_KEY,JSON.stringify(state.activeBets.slice(0,500)))}
+function syncControllerBet(bet){
+  if(!bet||!bet.gameKey||!bet.roundId)return;
+  const endpoint=bet.status==='open'||bet.status==='pending'?'/api/live-bets':'/api/bets-settle';
+  fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bet)}).catch(()=>{});
+}
+function recordOpenCasinoBet(gameKey,side,type,rate,amt){
+  const round=ensureRound(gameKey);
+  return pushSettledBet({id:uid(),gameKey,roundId:round.roundId,team:side,type,rate,amt,profit:0,player:(state.user&&state.user.id)||'Player',status:'open',result:'PENDING'});
+}
 function knownBets(){
   const merged=new Map();
   [...(state.activeBets||[]),...(state.serverBets||[])].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
@@ -603,27 +614,32 @@ function applyCascade(bet){
   addStatement({type:'BET', userId:playerId, amount:won?(profit):(-(amt)), note:(bet.type||'')+' '+(bet.team||'')+' '+(bet.status||''), betId:bet.id, market:bet.type, side:bet.team, status:bet.status});
 }
 function pushSettledBet(partial){
+  const inferredGameKey=partial.gameKey||({AndarBahar:'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'}[partial.type]||'');
+  const inferredRoundId=partial.roundId||(inferredGameKey?ensureRound(inferredGameKey).roundId:'');
+  const player=(partial.player)||((state.user&&state.user.id)||'Player');
+  const existing=state.activeBets.find(b=>b.status==='open'&&b.gameKey===inferredGameKey&&b.roundId===inferredRoundId&&b.team===(partial.team||partial.side||'')&&String(b.player||b.playerId)===String(player));
   const bet={
-    id:partial.id||uid(),
+    id:partial.id||existing?.id||uid(),
     team:partial.team||partial.side||'',
     type:partial.type||'',
     rate:partial.rate||0,
     amt:partial.amt||0,
     profit:partial.profit||0,
     ts:Date.now(),
-    player:(partial.player)||((state.user&&state.user.id)||'Player'),
-    playerId:(partial.player)||((state.user&&state.user.id)||'Player'),
+    player,
+    playerId:player,
     status:partial.status||'pending',
     result:partial.result||'',
-    gameKey:partial.gameKey||'',
-    roundId:partial.roundId||'',
+    gameKey:inferredGameKey,
+    roundId:inferredRoundId,
     match:partial.match||'',
     sessionKey:partial.sessionKey||'',
     sessionLine:partial.sessionLine||'',
     rolled_back:false
   };
-  state.activeBets.unshift(bet);
+  if(existing)Object.assign(existing,bet);else state.activeBets.unshift(bet);
   saveBets();
+  syncControllerBet(bet);
   if(bet.status==='won'||bet.status==='lost') applyCascade(bet);
   return bet;
 }
@@ -1382,7 +1398,7 @@ function playAndarBahar(side){
   const key='andar-bahar', amt=readStake(key), rate=1.95;
   if(!amt||!canPlaceBet(key))return;
   if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
-  syncPlayerChips(getCoins()-amt);state.andarSpinning=true;state.abJoker=null;state.andarCards={andar:[],bahar:[]};render();
+  syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'AndarBahar',rate,amt);state.andarSpinning=true;state.abJoker=null;state.andarCards={andar:[],bahar:[]};render();
   setTimeout(()=>{
     const deck=freshDeck(),joker=deck.pop();state.abJoker=joker;render();
     const andar=[],bahar=[];let first='Andar',winner=null;
@@ -1416,7 +1432,7 @@ function lucky7(){
 function playLucky7(side){
   const key='lucky7',rates={'7 UP':1.95,'7':11,'7 DOWN':1.95},rate=rates[side]||1.95,amt=readStake(key);
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
-  syncPlayerChips(getCoins()-amt);state.l7Spin=true;state.l7Card=null;render();
+  syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'LUCKY 7',rate,amt);state.l7Spin=true;state.l7Card=null;render();
   setTimeout(()=>{
     const card=freshDeck()[0];state.l7Card=card;state.l7Spin=false;render();
     setTimeout(()=>{const natural=cardRank(card)>7?'7 UP':cardRank(card)<7?'7 DOWN':'7',winSide=smartDecision(key,['7 UP','7','7 DOWN'],natural),won=side===winSide,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'LUCKY 7',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON · card '+card.v:'LOST · card '+card.v);finishRound(key);render()},RESULT_HOLD_MS);
@@ -1462,7 +1478,7 @@ function handScore(cards){
 function playTeenPatti(side){
   const key='teen-patti',rates={'Team A':1.98,'Tie':8.5,'Team B':1.98},rate=rates[side]||1.98,amt=readStake(key);
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
-  syncPlayerChips(getCoins()-amt);state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();
+  syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'TEEN PATTI',rate,amt);state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();
   const deck=freshDeck(),player=[deck.pop(),deck.pop(),deck.pop()],dealer=[deck.pop(),deck.pop(),deck.pop()];let step=0;
   const settle=()=>{const ps=handScore(player),ds=handScore(dealer),natural=ps>ds?'Team A':ds>ps?'Team B':'Tie',result=smartDecision(key,['Team A','Tie','Team B'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'TEEN PATTI',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.tpSpin=false;toast(won?side+' WON':'LOST · '+result);finishRound(key);render()};
   const reveal=()=>{if(step%2===0)state.tpPlayer.push(player[Math.floor(step/2)]);else state.tpDealer.push(dealer[Math.floor(step/2)]);step++;render();if(step<6)setTimeout(reveal,CARD_GAP_MS);else setTimeout(settle,RESULT_HOLD_MS)};
@@ -1493,7 +1509,7 @@ function dragontiger(){
 function playDragonTiger(side){
   const key='dragon-tiger',rates={'Dragon':1.95,'Tie':9,'Tiger':1.95},rate=rates[side]||1.95,amt=readStake(key);
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
-  syncPlayerChips(getCoins()-amt);state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();
+  syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'DRAGON TIGER',rate,amt);state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();
   const deck=freshDeck(),dragon=deck.pop(),tiger=deck.pop();
   setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
 }
@@ -1977,9 +1993,11 @@ function adminDecisionCards(){
     {key:'teen-patti',name:'Teen Patti',type:'TEEN PATTI',sides:['Team A','Team B']},
     {key:'dragon-tiger',name:'Dragon Tiger',type:'DRAGON TIGER',sides:['Dragon','Tie','Tiger']}
   ];
-  return `<div class="controller-game-grid">${defs.map(g=>{
+  const active=defs.some(g=>g.key===state.controllerGame)?state.controllerGame:'andar-bahar';
+  return `<div class="controller-game-tabs">${defs.map(g=>`<button class="controller-tab ${g.key===active?'active':''}" onclick="state.controllerGame='${g.key}';render()">${g.name}</button>`).join('')}</div><div class="controller-game-grid">${defs.filter(g=>g.key===active).map(g=>{
     const r=ensureRound(g.key);
-    const totals=sideTotalsFor(g.type,g.sides);
+    const totals=sideTotalsFor(g.type,g.sides,g.key);
+    const totalCoins=Object.values(totals).reduce((sum,value)=>sum+Number(value||0),0);
     const minSide=g.sides.reduce((a,s)=> (totals[s]||0)<(totals[a]||0)?s:a, g.sides[0]);
     const maxSide=g.sides.reduce((a,s)=> (totals[s]||0)>(totals[a]||0)?s:a, g.sides[0]);
     const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
@@ -1995,7 +2013,7 @@ function adminDecisionCards(){
         <span style="background:#21262d;padding:4px 8px;border-radius:4px">⏱ <b>${left}s</b></span>
         ${r.forcedWinner?`<span style="background:#3d2a00;color:#f0c040;padding:4px 8px;border-radius:4px">FORCE: ${r.forcedWinner}</span>`:''}
       </div>
-      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Side totals (kam coins wali soft highlight)</div>
+      <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Total coins this round: <b style="color:#fff">${totalCoins}</b> · Side totals</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
         ${g.sides.map(s=>{
           const v=totals[s]||0;
