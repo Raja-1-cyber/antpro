@@ -1,0 +1,26 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "watchPatterns": [
+      "app.js",
+      "server.mjs",
+      "live-fix.js",
+      "login-fix.js",
+      "staff-fix.js",
+      "cricket-fix.js",
+      "package.json",
+      "package-lock.json",
+      "public/**",
+      "*.css",
+      "index.html"
+    ]
+  },
+  "deploy": {
+    "startCommand": "node server.mjs",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ALWAYS",
+    "restartPolicyMaxRetries": 10
+  }
+}
