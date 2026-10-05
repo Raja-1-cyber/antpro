@@ -18,6 +18,8 @@ Do not run the scraper as part of the web process. Keeping it separate prevents 
 node server.mjs
 ```
 
+The repository includes a root `Dockerfile` based on `node:22-bookworm-slim`. This is intentional: it prevents Railway from accidentally using the scraper's old Python image for the web service, which would produce `The executable node could not be found`.
+
 5. Generate a public domain for this service.
 6. Add these variables to the **web service**:
 
@@ -55,6 +57,8 @@ In the same Railway project, add another service from the same GitHub repository
 ```text
 python cricket_scraper.py
 ```
+
+The scraper has its own `scraper/Dockerfile` based on `python:3.12-slim`.
 
 3. Add these variables to the **scraper service**:
 
