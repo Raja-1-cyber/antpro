@@ -557,11 +557,9 @@ function applyCascade(bet){
   const amt=Number(bet.amt)||0;
   const profit=Number(bet.profit)||0;
   const won=bet.status==='won';
-  const category=String(bet.category||bet.game||bet.type||'').toLowerCase();
-  const shareKey=/(andar|bahar|lucky|teen|dragon|casino|matka)/.test(category)?'casinoShare':'cricketShare';
-  const agentShare=Number(agent&&agent[shareKey])||0;
-  const superShare=Number(supermaster&&supermaster[shareKey])||0;
-  const masterShare=Number(supermaster?supermaster[shareKey]:(agent&&agent[shareKey]))||0;
+  const agentShare=Number(agent&&agent.share)||0;
+  const superShare=Number(supermaster&&supermaster.share)||0;
+  const masterShare=Number(supermaster?supermaster.share:(agent&&agent.share))||0;
   const agentCommPct=Number(agent&&agent.commission)||0;
   const lines=[];
   if(won){
