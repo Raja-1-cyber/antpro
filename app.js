@@ -384,7 +384,7 @@ async function syncSharedRounds(){
     const r=await fetch('/api/live-rounds',{cache:'no-store',signal:controller.signal});clearTimeout(timeout);
     if(!r.ok)throw new Error('round api '+r.status);
     const data=await r.json();state.sharedRounds=data;localStorage.setItem('antpro_live_rounds',JSON.stringify(data));
-    if(['andar','lucky7','teenpatti','dragontiger','admin'].includes(state.view))render();
+    if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view)||(state.view==='admin'&&state.adminAuthed))render();
   }catch{}
   finally{sharedSyncBusy=false}
 }
@@ -408,7 +408,7 @@ async function syncLiveBets(){
     }
   }catch{}
   finally{state.liveBetsLoading=false;sharedBetsBusy=false}
-  if(state.view==='livebets'||state.view==='admin')render();
+  if(state.view==='livebets'||(state.view==='admin'&&state.adminAuthed))render();
 }
 setTimeout(syncSharedRounds,50);
 window.__antproLegacyRoundSync=setInterval(syncSharedRounds,1000);
