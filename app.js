@@ -1326,10 +1326,10 @@ function casino(){
   const liveGames=[
     ['ANDAR BAHAR','andar','andar-bahar','live-andar-bahar','casino-ref-live-andar-bahar.png'],
     ['T20 TEEN PATTI','teenpatti','teen-patti','t20-teen-patti','casino-ref-t20-teen-patti.png'],
-    ['LUCKY 7','lucky7','lucky7','lucky-7'],
-    ['DRAGON TIGER','dragontiger','dragon-tiger','dragon-tiger'],
-    ['AMAR AKBAR ANTHONY','aaa','virtual','amar-akbar-anthony'],
-    ['ONE DAY TEEN PATTI','odtp','virtual','one-day-teen-patti']
+    ['LUCKY 7','lucky7','lucky7','lucky-7','casino-ref-lucky-7.png'],
+    ['DRAGON TIGER','dragontiger','dragon-tiger','dragon-tiger','casino-ref-dragon-tiger.png'],
+    ['AMAR AKBAR ANTHONY','aaa','virtual','amar-akbar-anthony','casino-ref-amar-akbar-anthony.png'],
+    ['ONE DAY TEEN PATTI','odtp','virtual','one-day-teen-patti','casino-ref-one-day-teen-patti.png']
   ];
   return `${topBtn()}
   <div class="view-title">CASINO GAMES</div>
