@@ -905,7 +905,7 @@ function header(){
   const c=(u.role==='player'?getCoins():(u.chips||0)).toFixed(2);
   const label = u.role==='supermaster' ? `${u.id} (Super Master)` : u.role==='agent' ? `${u.id} (Agent)` : u.role==='master' ? `${u.id} (Master)` : `${u.id} (${u.name||''})`;
   return `<div class="topbar">
-    <div class="brand-logo"><img src="/assets/antpro-logo.svg" alt="antpro"></div>
+    <div class="brand-logo"><img src="/assets/header-logo.png" alt="antpro"></div>
     <div class="user"><strong>${label}</strong></div>
     <button class="header-menu" onclick="state.menu=true;render()" aria-label="Open menu">☰</button>
   </div>
@@ -1322,10 +1322,10 @@ function match(){
 }
 function casino(){
   const live=getGamesLive();
-  const virtual=[['DUS KA DUM','virtual','dus-ka-dum'],['ROULETTE','virtual','roulette'],['ANDAR BAHAR','andar','virtual-andar-bahar']];
+  const virtual=[['DUS KA DUM','virtual','dus-ka-dum','casino-ref-dus-ka-dum.png'],['ROULETTE','virtual','roulette','casino-ref-roulette.png'],['ANDAR BAHAR','andar','virtual-andar-bahar','casino-ref-virtual-andar-bahar.png']];
   const liveGames=[
-    ['ANDAR BAHAR','andar','andar-bahar','live-andar-bahar'],
-    ['T20 TEEN PATTI','teenpatti','teen-patti','t20-teen-patti'],
+    ['ANDAR BAHAR','andar','andar-bahar','live-andar-bahar','casino-ref-live-andar-bahar.png'],
+    ['T20 TEEN PATTI','teenpatti','teen-patti','t20-teen-patti','casino-ref-t20-teen-patti.png'],
     ['LUCKY 7','lucky7','lucky7','lucky-7'],
     ['DRAGON TIGER','dragontiger','dragon-tiger','dragon-tiger'],
     ['AMAR AKBAR ANTHONY','aaa','virtual','amar-akbar-anthony'],
@@ -1335,15 +1335,15 @@ function casino(){
   <div class="view-title">CASINO GAMES</div>
   <div class="casino-section">
     <h3>Virtual Casino</h3>
-    <div class="casino-grid virtual-grid">${virtual.map(([n,v,a])=>`
+    <div class="casino-grid virtual-grid">${virtual.map(([n,v,a,file])=>`
       <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.svg" alt="${n}">
+        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}">
       </div>`).join('')}</div>
     <h3>Live Casino</h3>
-    <div class="casino-grid">${liveGames.map(([n,v,k,a])=>{
+    <div class="casino-grid">${liveGames.map(([n,v,k,a,file])=>{
       const on=k?live[k]!==false:true;
       return `<div class="casino-tile ${on?'':'off'}" onclick="${on&&['andar','lucky7','teenpatti','dragontiger'].includes(v)?`go('${v}')`:'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/casino-${a}.svg" alt="${n}">
+        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}">
       </div>`;
     }).join('')}</div>
   </div>${back()}`;
