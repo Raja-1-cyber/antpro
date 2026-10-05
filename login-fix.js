@@ -368,8 +368,8 @@
   setTimeout(installLoginRenderGuard, 400);
   setTimeout(installLoginRenderGuard, 1200);
 
-  // Mobile-friendly input attributes after each render
-  setInterval(function () {
+  // Mobile-friendly input attributes: apply once; never touch the login DOM every second.
+  function applyLoginInputAttributes() {
     if (state.loggedIn) return;
     var u = document.getElementById('loginUser');
     var p = document.getElementById('loginPass');
@@ -384,14 +384,9 @@
       p.setAttribute('autocomplete', 'current-password');
       p.style.fontSize = '16px';
     }
-  }, 1000);
-
-  setInterval(function () {
-    if (state.loginBusy && state._loginStartedAt && Date.now() - state._loginStartedAt > 8000) {
-      state.loginBusy = false;
-      try { if (typeof render === 'function') render(); } catch (e) {}
-    }
-  }, 2000);
+  }
+  applyLoginInputAttributes();
+  setTimeout(applyLoginInputAttributes, 400);
 
   console.log('[AntPro] login-fix v4 storage-safe | Master creates hierarchy | OTP ' + DEMO_OTP);
 })();
