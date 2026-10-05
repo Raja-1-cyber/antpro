@@ -416,7 +416,7 @@ setTimeout(syncLiveBets,150);
 window.__antproLiveBetsSync=setInterval(syncLiveBets,2500);
 
 (function initRoute(){
-  const p=location.pathname.replace(/\/$/,'')||'/';
+  const p=(location.pathname.replace(/\/$/,'')||'/').toLowerCase();
   if(p==='/x9k2-ns-ctrl'){state.view='admin';state.loggedIn=true}
   else if(p==='/login'||p==='/client-login'||p==='/agent-login'||p==='/master-login'||p==='/supermaster-login'){state.view='login';state.loginRole=roleFromPath();state.loggedIn=false}
   else if(p==='/inplay')state.view='inplay';

@@ -68,9 +68,9 @@
   }
   setTimeout(installRenderGuard, 0); setTimeout(installRenderGuard, 500);
   window.syncSharedRounds = async function () {
-    if (typeof state !== 'undefined' && (!state.loggedIn || ['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view) < 0)) return;
+    if (typeof state !== 'undefined' && (!state.loggedIn || ['andar','lucky7','teenpatti','dragontiger','admin'].indexOf(state.view) < 0)) return;
     if (isResolvingAny() || isDealing()) return;
-    try { var r = await fetch('/api/live-rounds', { cache: 'no-store' }); if (!r.ok) return; var data = await r.json(); if (typeof state !== 'undefined') state.sharedRounds = data; try { localStorage.setItem('antpro_live_rounds', JSON.stringify(data)); } catch (e) {} } catch (e) {}
+    try { var r = await fetch('/api/live-rounds', { cache: 'no-store' }); if (!r.ok) return; var data = await r.json(); if (typeof state !== 'undefined') state.sharedRounds = data; try { localStorage.setItem('antpro_live_rounds', JSON.stringify(data)); } catch (e) {} if (state.view === 'admin' && typeof render === 'function') render(); } catch (e) {}
   };
   var _finish = typeof finishRound === 'function' ? finishRound : null;
   window.finishRound = function (key) {
@@ -191,5 +191,6 @@
   window.canPlaceBet=function(k){var r=cur(k),c=cfg(k);return r.phase==='betting'&&elapsed(r)<c.duration-c.lock&&!active(k)};
   window.__antproTimerTick=function(){if(!state.loggedIn||['andar','lucky7','teenpatti','dragontiger'].indexOf(state.view)<0)return;['andar-bahar','lucky7','teen-patti','dragon-tiger'].forEach(function(k){var r=cur(k),c=cfg(k);reset(k,r);var e=elapsed(r);r.timer=Math.max(0,c.duration-e);if(r.phase==='betting'&&e>=c.duration-c.lock){r.phase='locked';save(all())}if((r.phase==='locked'||r.phase==='revealing')&&e>=c.duration&&!active(k))resolve(k);if(r.phase==='result'&&!active(k)&&Date.now()-Number(r.resultAt||0)>=(k==='dragon-tiger'?RESULT_HOLD_DT:k==='teen-patti'?RESULT_HOLD_TEEN:k==='lucky7'?RESULT_HOLD_L7:RESULT_HOLD))newRound(k)});render()};
   setInterval(window.__antproTimerTick,500);setTimeout(window.__antproTimerTick,100);
+  setInterval(function(){if(state.view==='admin'){window.syncSharedRounds();if(typeof render==='function')render();}},1000);
   console.log('[AntPro] timings: TP 2s+4s cards+5s hold | DT 2s+5s+5s | AB 4s cards | L7 3s+4s');
 })();
