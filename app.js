@@ -218,10 +218,10 @@ function sideTotalsFor(gameType, sides, roundKey){
   const totals={};
   sides.forEach(s=>totals[s]=0);
   const round=roundKey?ensureRound(roundKey):null;
-  const roundStart=Number(round?.startedAt)||0;
+  const roundId=String(round?.roundId||'');
   const merged=new Map();
   [...(state.activeBets||[]),...(state.serverBets||[])].forEach(b=>{if(b&&b.id)merged.set(b.id,b)});
-  const bets=Array.from(merged.values()).filter(b=>['open','pending'].includes(String(b.status||'open').toLowerCase())&&(!roundStart||Number(b.ts||0)>=roundStart));
+  const bets=Array.from(merged.values()).filter(b=>['open','pending'].includes(String(b.status||'open').toLowerCase())&&(!roundId||String(b.roundId||'')===roundId));
   bets.filter(b=>{
     const t=(b.type||'').toLowerCase();
     if(gameType==='AndarBahar') return t==='andarbahar'||t.includes('andar');
