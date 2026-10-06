@@ -1,8 +1,7 @@
-/* AntPro controller-fix v5
-   FIX: old controller was re-injected by app.js every 1-2s → blink
-   - REMOVE legacy controller nodes from DOM (not just CSS hide)
-   - Hook render + MutationObserver
-   - Stable panel outside #app
+/* AntPro controller-fix v6
+   ROOT CAUSE (from video): app.js setInterval every 1s calls render() on admin
+   → full old MASTER DECISION PANEL rebuild → swaps with new panel.
+   FIX: debounce/skip admin re-render while controller is open; strip legacy DOM.
 */
 (function () {
   'use strict';
@@ -19,6 +18,8 @@
   var busyForce = {};
   var structureBuilt = false;
   var started = false;
+  var lastAdminFullRender = 0;
+  var allowNextAdminRender = true;
 
   function isAdminAuthed() {
     try { return !!(typeof state !== 'undefined' && state.adminAuthed); } catch (e) { return false; }
@@ -37,71 +38,61 @@
     return isAdminAuthed() && isControllerRoute();
   }
 
-  /** Physically remove old app.js controller UI so it cannot flash */
+  /** Stop app.js 1s interval from rebuilding the whole admin page */
+  function installRenderDebounce() {
+    if (typeof window.render !== 'function' || window.render.__ctrlDebounce) return;
+    var orig = window.render;
+    window.render = function () {
+      try {
+        if (shouldShow()) {
+          var now = Date.now();
+          // Allow explicit navigation / first paint only; block 1s interval spam
+          if (!allowNextAdminRender && lastAdminFullRender && (now - lastAdminFullRender) < 30000) {
+            killLegacyController();
+            return; // SKIP full rebuild — this stops the blink
+          }
+          allowNextAdminRender = false;
+          lastAdminFullRender = now;
+        }
+      } catch (e) {}
+      var out = orig.apply(this, arguments);
+      try { killLegacyController(); } catch (e2) {}
+      return out;
+    };
+    window.render.__ctrlDebounce = true;
+  }
+
   function killLegacyController() {
     try {
+      // Override global if app exposed it
+      if (typeof window.adminDecisionCards === 'function' && !window.adminDecisionCards.__stub) {
+        window.adminDecisionCards = function () { return ''; };
+        window.adminDecisionCards.__stub = true;
+      }
+
       var app = document.getElementById('app');
       if (!app) return;
 
-      // Remove known legacy nodes
-      var sel = [
-        '.controller-game-tabs',
-        '.controller-game-grid',
-        '.controller-game-card',
-        '.controller-force-btn',
-        '.controller-auto-note',
-        '.controller-tab'
-      ];
-      app.querySelectorAll(sel.join(',')).forEach(function (el) {
+      app.querySelectorAll(
+        '.controller-game-tabs, .controller-game-grid, .controller-game-card, ' +
+        '.controller-force-btn, .controller-auto-note, .controller-tab'
+      ).forEach(function (el) {
         if (el && el.parentNode) el.parentNode.removeChild(el);
       });
 
-      // Hide / strip admin-section that is the decision panel
       app.querySelectorAll('.admin-section').forEach(function (sec) {
-        var h = sec.querySelector('h4');
-        var title = h ? String(h.textContent || '') : '';
-        var body = String(sec.textContent || '');
-        if (/DECISION|FORCE|ROUND NO|side totals/i.test(title + ' ' + body.slice(0, 200))) {
-          // Keep heading, clear body so layout does not jump to old cards
-          var keep = h ? h.outerHTML : '';
-          if (sec.getAttribute('data-antpro-stripped') === '1') return;
-          sec.innerHTML = keep +
-            '<p style="font-size:11px;color:#8b949e;margin:8px 0 0">Live controller panel is below (stable).</p>';
-          sec.setAttribute('data-antpro-stripped', '1');
+        var text = String(sec.textContent || '');
+        if (/MASTER GAME DECISION|Force result|side totals|Decision open until/i.test(text)) {
+          if (sec.getAttribute('data-antpro-gone') === '1') {
+            sec.style.display = 'none';
+            return;
+          }
+          sec.setAttribute('data-antpro-gone', '1');
+          sec.style.display = 'none';
+          sec.innerHTML = '';
         }
       });
     } catch (e) {}
-  }
-
-  function installKillHooks() {
-    if (window.__antproKillLegacy) return;
-    window.__antproKillLegacy = true;
-
-    // After every render
-    if (typeof window.render === 'function' && !window.render.__legacyKill) {
-      var orig = window.render;
-      window.render = function () {
-        var out = orig.apply(this, arguments);
-        killLegacyController();
-        return out;
-      };
-      window.render.__legacyKill = true;
-    }
-
-    // Any DOM inject into #app
-    var app = document.getElementById('app');
-    if (app && !app.__legacyObs) {
-      app.__legacyObs = true;
-      var obs = new MutationObserver(function () {
-        if (shouldShow()) killLegacyController();
-      });
-      obs.observe(app, { childList: true, subtree: true });
-    }
-
-    // Safety interval (cheap)
-    setInterval(function () {
-      if (shouldShow()) killLegacyController();
-    }, 400);
   }
 
   function fmt(n) {
@@ -173,7 +164,6 @@
     if (p === 'locked') return 'LOCKED';
     if (p === 'revealing') return 'REVEALING';
     if (p === 'result') return 'RESULT';
-    if (p === 'forced') return 'FORCED';
     return (phase || '\u2014').toUpperCase();
   }
 
@@ -188,7 +178,7 @@
   }
 
   async function refresh() {
-    installKillHooks();
+    installRenderDebounce();
     killLegacyController();
     if (!shouldShow()) {
       var hide = document.getElementById('controller-live-root');
@@ -207,9 +197,7 @@
         cache.bets = Array.isArray(bd.bets) ? bd.bets : (Array.isArray(bd) ? bd : []);
       }
       cache.updated = Date.now();
-    } catch (e) {
-      console.warn('[AntPro] controller poll failed', e);
-    }
+    } catch (e) {}
     paint();
   }
 
@@ -254,9 +242,10 @@
     if (root) return root;
     root = document.createElement('div');
     root.id = 'controller-live-root';
+    // Place ABOVE #app so user sees new panel first (not below old junk)
     var app = document.getElementById('app');
-    if (app && app.parentNode) app.parentNode.insertBefore(root, app.nextSibling);
-    else document.body.appendChild(root);
+    if (app && app.parentNode) app.parentNode.insertBefore(root, app);
+    else document.body.insertBefore(root, document.body.firstChild);
     return root;
   }
 
@@ -391,9 +380,10 @@
     var s = document.createElement('style');
     s.id = 'antpro-controller-fix-css';
     s.textContent = [
-      '.controller-game-tabs,.controller-game-grid,.controller-game-card,.controller-force-btn,.controller-auto-note,.controller-tab{display:none!important;height:0!important;overflow:hidden!important;visibility:hidden!important}',
+      '.controller-game-tabs,.controller-game-grid,.controller-game-card,.controller-force-btn,.controller-auto-note,.controller-tab{display:none!important}',
+      '.admin-section[data-antpro-gone="1"]{display:none!important}',
       '#controller-live-root{display:none}',
-      '.ctrl-root{padding:12px;max-width:1100px;margin:0 auto 24px;font-family:Roboto,Arial,sans-serif;color:#e5e7eb;background:#0b1220;border-top:2px solid #fbbf24}',
+      '.ctrl-root{padding:12px;max-width:1100px;margin:0 auto 16px;font-family:Roboto,Arial,sans-serif;color:#e5e7eb;background:#0b1220;border-top:2px solid #fbbf24}',
       '.ctrl-header-title{font-size:18px;font-weight:800;color:#fbbf24}',
       '.ctrl-header-sub{font-size:11px;color:#9ca3af;margin-top:2px}',
       '.ctrl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}',
@@ -405,7 +395,7 @@
       '.ctrl-phase-betting{background:#14532d;color:#86efac}',
       '.ctrl-phase-locked{background:#78350f;color:#fde68a}',
       '.ctrl-phase-revealing{background:#4c1d95;color:#ddd6fe}',
-      '.ctrl-phase-result,.ctrl-phase-forced{background:#1e3a8a;color:#93c5fd}',
+      '.ctrl-phase-result{background:#1e3a8a;color:#93c5fd}',
       '.ctrl-meta{font-size:10px;color:#9ca3af;margin-bottom:10px}',
       '.ctrl-sides{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}',
       '.ctrl-side{border-radius:8px;padding:8px;text-align:center;border:1px solid #374151;background:#0f172a}',
@@ -428,7 +418,7 @@
     if (started) return;
     started = true;
     ensureStyles();
-    installKillHooks();
+    installRenderDebounce();
     ensureRoot();
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(refresh, 1500);
@@ -438,10 +428,16 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 
+  // Re-install after app.js (in case render was redefined)
+  setTimeout(installRenderDebounce, 200);
+  setTimeout(installRenderDebounce, 800);
+  setTimeout(installRenderDebounce, 2000);
+
   setTimeout(function () {
     if (typeof window.go === 'function' && !window.go.__ctrlHook) {
       var _go = window.go;
       window.go = function (view) {
+        allowNextAdminRender = true; // allow one full paint on navigation
         var r = _go.apply(this, arguments);
         setTimeout(function () {
           killLegacyController();
@@ -457,5 +453,5 @@
     }
   }, 300);
 
-  console.log('[AntPro] controller-fix v5 \u2014 legacy DOM killed');
+  console.log('[AntPro] controller-fix v6 \u2014 admin re-render blocked');
 })();
