@@ -1895,7 +1895,7 @@ function clientDetails(){
 function ensureAgentMatches(){
   if(state.agentMatchesReady||state.agentMatchesLoading)return;
   state.agentMatchesLoading=true;
-  fetch('/api/cricket/matches',{cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject(new Error('feed unavailable'))).then(d=>{state.liveMatches=Array.isArray(d.matches)?d.matches:[]}).catch(()=>{state.liveMatches=[]}).finally(()=>{state.agentMatchesLoading=false;state.agentMatchesReady=true;if(state.view==='home'&&state.user&&state.user.role==='agent')render()});
+  fetch('/api/cricket/matches',{cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject(new Error('feed unavailable'))).then(d=>{state.liveMatches=Array.isArray(d.matches)?d.matches:[]}).catch(()=>{state.liveMatches=[]}).finally(()=>{state.agentMatchesLoading=false;state.agentMatchesReady=true;if(state.view==='agent'&&state.user&&state.user.role==='agent')render()});
 }
 function agentHome(){
   const u=state.user;
@@ -1906,25 +1906,25 @@ function agentHome(){
   const players=playerIds.map(id=>data.players[id]).filter(Boolean);
   ensureAgentMatches();
   const matches=state.liveMatches||[];
-  const matchRows=matches.length?matches.slice(0,8).map((m,i)=>`<div class="agent-match-row"><strong>${escapeHTML(m.name||`${m.home||''} v ${m.away||''}`)}</strong><span>${escapeHTML(m.scoreDisplay||m.score||'SCORE PENDING')}</span><button class="blue-btn" onclick="state.matchId=${i};go('match')">${m.live?'INPLAY':'DETAILS'}</button><button class="hierarchy-link" onclick="state.matchId=${i};go('match')">Details</button></div>`).join(''):`<div style="background:#fff;padding:12px;font-size:12px;color:#666;text-align:center">${state.agentMatchesLoading?'Loading live matches…':'No active matches right now'}</div>`;
-  return `${topBtn()}
-  <div class="hier-grid">
-    <button class="hier-btn" onclick="go('ledger')"><span class="icon">📒</span><small>P/L</small></button>
-    <button class="hier-btn" onclick="go('ledger')"><span class="icon">📋</span><small>My Ledger</small></button>
-    <button class="hier-btn" onclick="go('clientdetails')"><span class="icon">👤</span><small>Client</small></button>
-    <button class="hier-btn" onclick="go('rules')"><span class="icon">ℹ️</span><small>Rules</small></button>
-  </div>
-  <div class="hier-stats">
-    <div class="hier-stat"><span class="val">${players.length}</span><span class="lbl">Members</span></div>
-    <div class="hier-stat"><span class="val">${Math.max(0,Number(agent.share)||0)}%</span><span class="lbl">My Share</span></div>
-    <div class="hier-stat"><span class="val">${100-Math.max(0,Math.min(100,Number(agent.share)||0))}%</span><span class="lbl">Company Share</span></div>
-    <div class="hier-stat"><span class="val">2%</span><span class="lbl">Match Commission</span></div>
-    <div class="hier-stat"><span class="val">3%</span><span class="lbl">Session Commission</span></div>
-    <div class="hier-stat"><span class="val">${(agent.chips||0).toLocaleString()}</span><span class="lbl">Chips</span></div>
-  </div>
-  <div class="section-bar">Active Matches</div>
-  <div class="agent-match-list">${matchRows}</div>
-  ${back()}`;
+  const share=Math.max(0,Math.min(100,Number(agent.share)||0));
+  const nav=[['▣','Dashboard','agent'],['♙','Agent Master','clientdetails'],['◈','Sports-Betting','inplay'],['◆','Casino','casino'],['◉','Matka','matka'],['₹','Ledger','ledger'],['▤','Cash Transaction','statement'],['%','Comm. Report','commission'],['▥','Reports','pnl'],['⚙','ANTPRO999 Setting','password'],['♙','Dead Agent Master','clientdetails']];
+  const matchRows=matches.length?matches.slice(0,13).map((m,i)=>`<tr><td>${i+1}</td><td>${escapeHTML(m.name||`${m.home||''} v ${m.away||''}`)}</td><td>${escapeHTML(m.openDate||m.date||'—')}</td><td>${m.live?'<button class="agent-inplay" onclick="state.matchId='+i+';go(\'match\')">INPLAY</button>':'—'}</td><td><button class="agent-details" onclick="state.matchId=${i};go('match')">Details</button></td></tr>`).join(''):`<tr><td colspan="5" class="agent-empty">${state.agentMatchesLoading?'Loading live matches…':'No active matches right now'}</td></tr>`;
+  const stats=[['CHIPS',(agent.chips||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})],['MEMBERS',players.length],['MY SHARE',share+'%'],['COMPANY SHARE',(100-share)+'%'],['MATCH COMMISSION',(Number(agent.commission)||2)+'%'],['SESSION COMMISSION','3%']];
+  return `<div class="agent-reference-dashboard">
+    <aside class="agent-reference-sidebar">
+      <div class="agent-sidebar-logo"><img src="/assets/header-logo-4k-transparent.png" alt="antpro"></div>
+      <nav>${nav.map(([icon,label,view])=>`<button class="agent-nav-item ${view==='agent'?'active':''}" onclick="go('${view}')"><span>${icon}</span>${label}</button>`).join('')}</nav>
+      <button class="agent-nav-item agent-logout" onclick="go('login')"><span>↪</span>Logout</button>
+    </aside>
+    <section class="agent-reference-main">
+      <div class="agent-reference-notice">Clients: 15 - 20 Min lagenge proper chaloo hone me ... Server problem Hui h ...</div>
+      <div class="agent-reference-cards">
+        ${[['♙','Agent','clientdetails'],['▣',"Sport's Details",'inplay'],['₹','Ledger','ledger'],['▤','Cash Transaction','statement'],['⚙','Setting','password'],['ℹ','Rules','rules']].map(([icon,label,view])=>`<button class="agent-reference-card" onclick="go('${view}')"><span>${icon}</span><b>${label}</b></button>`).join('')}
+      </div>
+      <div class="agent-reference-stats">${stats.map(([label,value])=>`<div class="agent-reference-stat"><strong>${value}</strong><span>${label}</span></div>`).join('')}</div>
+      <section class="agent-reference-matches"><h2>Active Matches</h2><div class="agent-match-table-wrap"><table><thead><tr><th>S/N</th><th>Name</th><th>Open Date</th><th>Inplay</th><th>Details</th></tr></thead><tbody>${matchRows}</tbody></table></div></section>
+    </section>
+  </div>`;
 }
 function agentViewPlayer(pid){
   const data=loadUsers();
