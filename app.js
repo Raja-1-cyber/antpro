@@ -998,7 +998,8 @@ function doLogin(){
   } else if(acc.role==='master'){
     go('home');
   } else if(acc.role==='agent'){
-    go('home');
+    // Agents land on the dashboard-style home with member stats and active matches.
+    go('agent');
   } else {
     if(typeof acc.chips==='number') setCoins(acc.chips);
     state.welcome=true;
