@@ -15,7 +15,7 @@ const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-defa
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
-const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:4,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:4,resultHold:5000}};
+const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:5,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:5,resultHold:5000}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
 const CRICBUZZ_LIVE_URL='https://www.cricbuzz.com/cricket-match/live-scores';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
@@ -60,7 +60,7 @@ function normalizeShareBalances(u){
   u=u||defaultUsers();
   const all=[...Object.values(u.masters||{}),...Object.values(u.superMasters||{}),...(u.superMaster?[u.superMaster]:[]),...Object.values(u.agents||{}),...Object.values(u.players||{})];
   const children=parent=>{const id=String(parent?.id||'').toUpperCase();if(parent?.role==='master')return [...Object.values(u.superMasters||{}),...Object.values(u.agents||{})].filter(x=>String(x.parentMasterId||x.masterId||'').toUpperCase()===id&&!x.superId);if(parent?.role==='supermaster')return Object.values(u.agents||{}).filter(x=>String(x.superId||'').toUpperCase()===id);if(parent?.role==='agent')return Object.values(u.players||{}).filter(x=>String(x.agentId||'').toUpperCase()===id);return []};
-  all.forEach(x=>{if(x.role==='player'){x.share=0;x.casinoShare=0;x.cricketShare=0;x.commission=0}else{x.share=Math.max(0,Math.min(100,Number(x.share??(x.role==='master'?100:0))||0));x.casinoShare=Math.max(0,Math.min(100,Number(x.casinoShare??x.share)||0));x.cricketShare=Math.max(0,Math.min(100,Number(x.cricketShare??x.share)||0))}});
+  all.forEach(x=>{if(x.role==='player'){x.share=0;x.casinoShare=0;x.cricketShare=0;x.commission=0}else{x.share=Math.max(0,Math.min(100,Number(x.share??(x.role==='master'?100:Math.max(Number(x.casinoShare)||0,Number(x.cricketShare)||0)))||0));x.casinoShare=Math.max(0,Math.min(100,Number(x.casinoShare??x.share)||0));x.cricketShare=Math.max(0,Math.min(100,Number(x.cricketShare??x.share)||0))}});
   all.forEach(x=>{const kids=children(x);for(const [field,cap] of [['share','share'],['casinoShare','casinoShare'],['cricketShare','cricketShare']]){let remaining=Math.max(0,Number(x[cap])||0);for(const child of kids){const value=Math.max(0,Math.min(Number(child[field])||0,remaining));child[field]=value;remaining-=value}}const used=kids.reduce((n,c)=>n+Math.max(0,Number(c.share)||0),0);const usedCasino=kids.reduce((n,c)=>n+Math.max(0,Number(c.casinoShare)||0),0);const usedCricket=kids.reduce((n,c)=>n+Math.max(0,Number(c.cricketShare)||0),0);x.shareAvailable=Math.max(0,x.share-used);x.casinoShareAvailable=Math.max(0,(x.casinoShare||0)-usedCasino);x.cricketShareAvailable=Math.max(0,(x.cricketShare||0)-usedCricket)});
   u.meta={...(u.meta||{}),shareSystemVersion:1};return u;
 }

@@ -78,7 +78,7 @@ function directShareChildren(data,parent){
 function normalizeShareBalances(data){
   data=data||defaultUsers();
   const all=[...Object.values(data.masters||{}),...Object.values(data.superMasters||{}),...(data.superMaster?[data.superMaster]:[]),...Object.values(data.agents||{}),...Object.values(data.players||{})];
-  all.forEach(u=>{if(u.role==='player'){u.share=0;u.casinoShare=0;u.cricketShare=0;u.commission=0}else{if(u.share==null)u.share=u.role==='master'?100:0;u.share=Math.max(0,Math.min(100,Number(u.share)||0));u.casinoShare=Math.max(0,Math.min(100,Number(u.casinoShare??u.share)||0));u.cricketShare=Math.max(0,Math.min(100,Number(u.cricketShare??u.share)||0))}});
+  all.forEach(u=>{if(u.role==='player'){u.share=0;u.casinoShare=0;u.cricketShare=0;u.commission=0}else{if(u.share==null)u.share=u.role==='master'?100:Math.max(Number(u.casinoShare)||0,Number(u.cricketShare)||0);u.share=Math.max(0,Math.min(100,Number(u.share)||0));u.casinoShare=Math.max(0,Math.min(100,Number(u.casinoShare??u.share)||0));u.cricketShare=Math.max(0,Math.min(100,Number(u.cricketShare??u.share)||0))}});
   all.forEach(u=>{const children=directShareChildren(data,u);for(const [field,cap] of [['share','share'],['casinoShare','casinoShare'],['cricketShare','cricketShare']]){let remaining=Math.max(0,Number(u[cap])||0);for(const child of children){const value=Math.max(0,Math.min(Number(child[field])||0,remaining));child[field]=value;remaining-=value}}const used=children.reduce((n,x)=>n+Math.max(0,Number(x.share)||0),0);const usedCasino=children.reduce((n,x)=>n+Math.max(0,Number(x.casinoShare)||0),0);const usedCricket=children.reduce((n,x)=>n+Math.max(0,Number(x.cricketShare)||0),0);u.shareAvailable=Math.max(0,Math.min(u.share,u.share-used));u.casinoShareAvailable=Math.max(0,Math.min(u.casinoShare||0,(u.casinoShare||0)-usedCasino));u.cricketShareAvailable=Math.max(0,Math.min(u.cricketShare||0,(u.cricketShare||0)-usedCricket));});
   return data;
 }
@@ -284,7 +284,7 @@ function getForced(gameKey){
   return r&&r.forcedWinner?r.forcedWinner:null;
 }
 const GAME_KEYS=['andar-bahar','lucky7','teen-patti','dragon-tiger'];
-const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:4},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:4}};
+const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:5},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:5}};
 const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=5000;
 function roundSeconds(key){
   const r=ensureRound(key);const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
@@ -1835,10 +1835,11 @@ function password(){
 
 function logoutToRole(){location.href=loginPath(state.user&&state.user.role||'player')}
 function staffHome(){
-  const u=state.user||{};const role=u.role;const data=loadUsers();
+  const sessionUser=state.user||{};const data=loadUsers();const u={...sessionUser,...(sessionUser.id?findUserById(sessionUser.id)||{}:{})};const role=u.role;
   const masters=Object.values(data.masters||{});const supers=hierarchySuperMasters(data);const agents=Object.values(data.agents||{});const players=Object.values(data.players||{});
   const memberCount=role==='agent'?players.filter(p=>(p.agentId||'').toUpperCase()===u.id.toUpperCase()).length:role==='supermaster'?hierarchyClientIds(data,u.id).length:role==='master'?supers.length+agents.length+players.length:supers.length+agents.length+players.length;
-  const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['CLIENTS',memberCount],['MY SHARE',(u.share||30)+''],['COMPANY SHARE',(100-(u.share||30))+'%'],['MATCH COMMISSION',(u.commission||2)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['SUPER MASTERS',supers.length],['AGENTS',agents.length],['CLIENTS',players.length],['MY SHARE',(u.share||100)+'%'],['REPORTS','READY']]:[['ROOT MASTER',hierarchyRoot(data).id],['AGENTS',hierarchyAgents(data,u.id).length],['CLIENTS',hierarchyClientIds(data,u.id).length],['TOTAL CHIPS',players.filter(p=>hierarchyClientIds(data,u.id).includes(p.id)).reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
+  const assignedShare=Math.max(0,Math.min(100,Number(u.share)||0));
+  const stats=role==='agent'?[['CHIPS',(u.chips||0).toFixed(2)],['CLIENTS',memberCount],['MY SHARE',assignedShare+'%'],['COMPANY SHARE',(100-assignedShare)+'%'],['MATCH COMMISSION',(Number(u.commission)||0)+'%'],['SESSION COMMISSION','3%']]:role==='master'?[['CHIPS',(u.chips||0).toFixed(2)],['SUPER MASTERS',supers.length],['AGENTS',agents.length],['CLIENTS',players.length],['MY SHARE',(u.share||100)+'%'],['REPORTS','READY']]:[['ROOT MASTER',hierarchyRoot(data).id],['AGENTS',hierarchyAgents(data,u.id).length],['CLIENTS',hierarchyClientIds(data,u.id).length],['TOTAL CHIPS',players.filter(p=>hierarchyClientIds(data,u.id).includes(p.id)).reduce((n,p)=>n+(p.chips||0),0).toLocaleString()],['ACTIVE GAMES','—'],['REPORTS','READY']];
   const actions=role==='agent'?[['AGENT DETAIL','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['SETTING','password','⚙'],['LOGOUT','logout','↪']]:role==='master'?[['MASTER DETAIL','hierarchy','♙'],['AGENT / CLIENT','clientdetails','♙'],['SPORTS-BETTING','inplay','▣'],['CASINO','casino','◆'],['MATKA','matka','◈'],['LEDGER','ledger','₹'],['CASH TRANSACTION','statement','▤'],['COMM. REPORT','commission','%'],['REPORTS','pnl','▥'],['USER CONTROL','usermgmt','⚙'],['LOGOUT','logout','↪']]:[['SUPER MASTER','super','♙'],['MASTER DETAILS','hierarchy-details','▣'],['AGENT DETAILS','hierarchy-details','♙'],['CLIENT DETAILS','clientdetails','♙'],['LEDGER','ledger','₹'],['REPORTS','livebets','▥'],['COMM. REPORT','commission','%'],['USER CONTROL','usermgmt','⚙'],['AUDIT / SETTINGS','super','⚙'],['LOGOUT','logout','↪']];
   return `${topBtn()}<div class="bo-dashboard">
     <div class="bo-identity"><strong>${u.id||'USER'}</strong><span>You are ${role==='agent'?'Agent':role==='master'?'Master':'Super Master'}</span></div>
@@ -1913,8 +1914,8 @@ function agentHome(){
   </div>
   <div class="hier-stats">
     <div class="hier-stat"><span class="val">${players.length}</span><span class="lbl">Members</span></div>
-    <div class="hier-stat"><span class="val">${agent.share||0}</span><span class="lbl">My Share</span></div>
-    <div class="hier-stat"><span class="val">${agent.commission||0}%</span><span class="lbl">Company Share</span></div>
+    <div class="hier-stat"><span class="val">${Math.max(0,Number(agent.share)||0)}%</span><span class="lbl">My Share</span></div>
+    <div class="hier-stat"><span class="val">${100-Math.max(0,Math.min(100,Number(agent.share)||0))}%</span><span class="lbl">Company Share</span></div>
     <div class="hier-stat"><span class="val">2%</span><span class="lbl">Match Commission</span></div>
     <div class="hier-stat"><span class="val">3%</span><span class="lbl">Session Commission</span></div>
     <div class="hier-stat"><span class="val">${(agent.chips||0).toLocaleString()}</span><span class="lbl">Chips</span></div>
