@@ -1,7 +1,7 @@
-/* AntPro controller-fix v3
-   - No blink: root outside #app, patch numbers only when changed
-   - Chips: ONLY current server round open bets (reset each new round)
-   - Force via API; game timers/math untouched
+/* AntPro controller-fix v4 — no blink
+   - Shows only when adminAuthed
+   - Hides legacy app.js controller grid (source of blink)
+   - DOM outside #app; update text only, never rebuild every tick
 */
 (function () {
   'use strict';
@@ -13,19 +13,31 @@
     { key: 'dragon-tiger', title: 'Dragon Tiger', sides: ['Dragon', 'Tie', 'Tiger'], types: ['dragon'] }
   ];
 
-  var cache = { rounds: {}, bets: [], updated: 0, sig: '' };
+  var cache = { rounds: {}, bets: [], updated: 0, dataSig: '' };
   var pollTimer = null;
   var busyForce = {};
   var structureBuilt = false;
   var started = false;
 
-  function isControllerView() {
+  function isAdminAuthed() {
     try {
-      if (typeof state !== 'undefined' && (state.view === 'admin' || state.view === 'controller' || state.adminAuthed)) return true;
+      return !!(typeof state !== 'undefined' && state.adminAuthed);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isControllerRoute() {
+    try {
+      if (typeof state !== 'undefined' && (state.view === 'admin' || state.view === 'controller')) return true;
       var path = (location.pathname || '').toLowerCase();
       if (path.indexOf('x9k2-ns-ctrl') >= 0 || path.indexOf('controller') >= 0) return true;
     } catch (e) {}
     return false;
+  }
+
+  function shouldShow() {
+    return isAdminAuthed() && isControllerRoute();
   }
 
   function fmt(n) {
@@ -55,21 +67,17 @@
       roundId: server.roundId || '',
       phase: server.phase || '\u2014',
       timer: server.timer != null ? server.timer : '\u2014',
-      betTimer: server.betTimer,
       forcedWinner: server.forcedWinner || null,
-      startedAt: server.startedAt,
-      duration: server.duration,
       result: server.result || null
     };
   }
 
-  /** STRICT: only open bets for THIS server roundId. New round => totals 0. */
+  /** Only current server round open chips */
   function sideTotals(gameKey, roundId) {
     var g = GAMES.find(function (x) { return x.key === gameKey; }) || { sides: [], types: [] };
     var totals = {};
     g.sides.forEach(function (s) { totals[s] = 0; });
     if (!roundId) return totals;
-
     (cache.bets || []).forEach(function (b) {
       if (!b || !isOpenBet(b) || !betBelongsToGame(b, g)) return;
       if (!b.roundId || String(b.roundId) !== String(roundId)) return;
@@ -106,20 +114,21 @@
     return (phase || '\u2014').toUpperCase();
   }
 
-  function snapshotSig() {
+  /** Stable data identity (ignore timer so UI does not thrash every second) */
+  function dataSig() {
     var parts = [];
     GAMES.forEach(function (g) {
       var r = getRound(g.key);
       var t = sideTotals(g.key, r.roundId);
-      parts.push(g.key + '|' + r.roundId + '|' + r.phase + '|' + r.timer + '|' + (r.forcedWinner || '') + '|' + JSON.stringify(t));
+      parts.push(g.key + '|' + r.roundId + '|' + r.phase + '|' + (r.forcedWinner || '') + '|' + JSON.stringify(t));
     });
     return parts.join('||');
   }
 
   async function refresh() {
-    if (!isControllerView()) {
-      var rootHide = document.getElementById('controller-live-root');
-      if (rootHide) rootHide.style.display = 'none';
+    if (!shouldShow()) {
+      var hide = document.getElementById('controller-live-root');
+      if (hide) hide.style.display = 'none';
       return;
     }
     try {
@@ -159,11 +168,10 @@
       var data = await res.json().catch(function () { return {}; });
       if (!res.ok) {
         if (typeof toast === 'function') toast(data.error || ('Force failed: ' + res.status));
-        else alert(data.error || ('Force failed: ' + res.status));
       } else {
         if (data.round) cache.rounds[gameKey] = data.round;
         if (typeof toast === 'function') toast(gameKey + ' \u2192 FORCE ' + side);
-        cache.sig = '';
+        cache.dataSig = '';
         await refresh();
       }
     } catch (e) {
@@ -183,11 +191,16 @@
     if (root) return root;
     root = document.createElement('div');
     root.id = 'controller-live-root';
-    // Outside #app so app.js render() does not wipe / blink this panel
     var app = document.getElementById('app');
     if (app && app.parentNode) app.parentNode.insertBefore(root, app.nextSibling);
     else document.body.appendChild(root);
     return root;
+  }
+
+  function setText(el, text) {
+    if (!el) return;
+    var t = String(text);
+    if (el.textContent !== t) el.textContent = t;
   }
 
   function buildStructure(root) {
@@ -218,12 +231,7 @@
       '<div class="ctrl-root">' +
         '<div class="ctrl-header">' +
           '<div class="ctrl-header-title">AntPro Controller</div>' +
-          '<div class="ctrl-header-sub">Current round chips only \u00b7 auto reset on next round \u00b7 force in BETTING/LOCKED</div>' +
-          '<div class="ctrl-legend">' +
-            '<span class="ctrl-leg-low">Green = kam</span>' +
-            '<span class="ctrl-leg-high">Red = zyada</span>' +
-            '<span class="ctrl-leg-eq">Gray = equal</span>' +
-          '</div>' +
+          '<div class="ctrl-header-sub">Current-round chips only \u00b7 force in BETTING/LOCKED</div>' +
         '</div>' +
         '<div class="ctrl-grid">' + cards + '</div>' +
         '<div class="ctrl-foot" data-role="foot">\u2014</div>' +
@@ -237,39 +245,13 @@
         var game = btn.getAttribute('data-game');
         var side = btn.getAttribute('data-side');
         if (!game || !side) return;
-        var r = getRound(game);
-        forceDecision(game, side, r.roundId || '');
+        forceDecision(game, side, (getRound(game).roundId || ''));
       });
     }
     structureBuilt = true;
   }
 
-  function setText(el, text) {
-    if (!el) return;
-    var t = String(text);
-    if (el.textContent !== t) el.textContent = t;
-  }
-
-  function paint() {
-    var root = ensureRoot();
-    if (!isControllerView()) {
-      root.style.display = 'none';
-      return;
-    }
-    root.style.display = 'block';
-
-    var sig = snapshotSig();
-    if (!structureBuilt) buildStructure(root);
-    else if (sig === cache.sig) {
-      // only update footer clock lightly
-      var footOnly = root.querySelector('[data-role="foot"]');
-      if (footOnly && cache.updated) {
-        setText(footOnly, 'Live \u00b7 ' + new Date(cache.updated).toLocaleTimeString() + ' \u00b7 this-round open bets only');
-      }
-      return;
-    }
-    cache.sig = sig;
-
+  function updateCards(root, full) {
     GAMES.forEach(function (g) {
       var card = root.querySelector('.ctrl-game-card[data-game="' + g.key + '"]');
       if (!card) return;
@@ -291,37 +273,34 @@
           meta,
           'Round: ' + (r.roundId || '\u2014') +
             ' \u00b7 Timer: ' + (r.timer != null ? r.timer : '\u2014') + 's' +
-            ' \u00b7 This round chips: ' + fmt(totalAll) +
-            (r.forcedWinner ? ' \u00b7 Forced: ' + r.forcedWinner : '') +
-            (r.result ? ' \u00b7 Last: ' + r.result : '')
+            ' \u00b7 Chips: ' + fmt(totalAll) +
+            (r.forcedWinner ? ' \u00b7 Forced: ' + r.forcedWinner : '')
         );
       }
 
-      var hint = card.querySelector('[data-role="hint"]');
-      if (hint) {
-        setText(
-          hint,
-          canForce
-            ? 'Decision OPEN \u2014 force allowed'
-            : (phase.toLowerCase() === 'result'
-                ? 'RESULT \u2014 chips reset next round'
-                : 'Decision locked')
-        );
-      }
-
-      g.sides.forEach(function (side) {
-        var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
-        if (!box) return;
-        var amt = totals[side] || 0;
-        var cls = amountClass(totals, side);
-        box.className = 'ctrl-side ctrl-side-' + cls;
-        setText(box.querySelector('[data-role="amt"]'), fmt(amt));
-        var btn = box.querySelector('.ctrl-force-btn');
-        if (btn) {
-          btn.disabled = !canForce;
-          btn.setAttribute('data-round', r.roundId || '');
+      if (full) {
+        var hint = card.querySelector('[data-role="hint"]');
+        if (hint) {
+          setText(hint, canForce ? 'Decision OPEN' : 'Decision locked / next round resets chips');
         }
-      });
+        g.sides.forEach(function (side) {
+          var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
+          if (!box) return;
+          var amt = totals[side] || 0;
+          box.className = 'ctrl-side ctrl-side-' + amountClass(totals, side);
+          setText(box.querySelector('[data-role="amt"]'), fmt(amt));
+          var btn = box.querySelector('.ctrl-force-btn');
+          if (btn) btn.disabled = !canForce;
+        });
+      } else {
+        // timer-only path: still refresh force disabled state lightly
+        g.sides.forEach(function (side) {
+          var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
+          if (!box) return;
+          var btn = box.querySelector('.ctrl-force-btn');
+          if (btn) btn.disabled = !canForce;
+        });
+      }
     });
 
     var foot = root.querySelector('[data-role="foot"]');
@@ -330,9 +309,28 @@
         foot,
         'Live \u00b7 ' +
           (cache.updated ? new Date(cache.updated).toLocaleTimeString() : '\u2014') +
-          ' \u00b7 only current-round open chips (reset each round)'
+          ' \u00b7 current-round chips only'
       );
     }
+  }
+
+  function paint() {
+    var root = ensureRoot();
+    if (!shouldShow()) {
+      root.style.display = 'none';
+      return;
+    }
+    root.style.display = 'block';
+
+    if (!structureBuilt || !root.querySelector('.ctrl-root')) {
+      buildStructure(root);
+      cache.dataSig = '';
+    }
+
+    var sig = dataSig();
+    var full = sig !== cache.dataSig;
+    if (full) cache.dataSig = sig;
+    updateCards(root, full);
   }
 
   function ensureStyles() {
@@ -340,14 +338,17 @@
     var s = document.createElement('style');
     s.id = 'antpro-controller-fix-css';
     s.textContent = [
+      /* Hide legacy in-app controller UI (app.js) — stops dual-UI blink */
+      '.admin-panel .controller-game-tabs,',
+      '.admin-panel .controller-game-grid,',
+      '.admin-panel .controller-game-card,',
+      '.admin-panel .controller-force-btn,',
+      '.admin-panel .controller-auto-note { display:none !important; }',
       '#controller-live-root{display:none}',
       '.ctrl-root{padding:12px;max-width:1100px;margin:0 auto 24px;font-family:Roboto,Arial,sans-serif;color:#e5e7eb;background:#0b1220;border-top:2px solid #fbbf24}',
-      '.ctrl-header{margin-bottom:12px}',
       '.ctrl-header-title{font-size:18px;font-weight:800;color:#fbbf24}',
       '.ctrl-header-sub{font-size:11px;color:#9ca3af;margin-top:2px}',
-      '.ctrl-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10px;font-weight:700}',
-      '.ctrl-leg-low{color:#86efac}.ctrl-leg-high{color:#fca5a5}.ctrl-leg-eq{color:#9ca3af}',
-      '.ctrl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}',
+      '.ctrl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}',
       '@media(max-width:720px){.ctrl-grid{grid-template-columns:1fr}}',
       '.ctrl-game-card{background:linear-gradient(180deg,#111827,#0b1220);border:1px solid #30363d;border-radius:10px;padding:12px}',
       '.ctrl-game-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}',
@@ -368,7 +369,6 @@
       '.ctrl-side-low .ctrl-side-amt{color:#86efac}',
       '.ctrl-side-high .ctrl-side-amt{color:#fca5a5}',
       '.ctrl-force-btn{width:100%;margin-top:4px;padding:6px 4px;border:0;border-radius:6px;background:#b45309;color:#fff;font-size:10px;font-weight:800;cursor:pointer}',
-      '.ctrl-force-btn:hover:not(:disabled){background:#d97706}',
       '.ctrl-force-btn:disabled{opacity:.4;cursor:not-allowed;background:#374151}',
       '.ctrl-phase-hint{margin-top:8px;font-size:10px;color:#6b7280;text-align:center}',
       '.ctrl-foot{margin-top:10px;font-size:10px;color:#6b7280;text-align:center}'
@@ -396,19 +396,18 @@
         var r = _go.apply(this, arguments);
         setTimeout(function () {
           if (view === 'admin' || view === 'controller') {
-            structureBuilt = false;
-            cache.sig = '';
+            // do not rebuild structure — just refresh data
             refresh();
           } else {
             var root = document.getElementById('controller-live-root');
             if (root) root.style.display = 'none';
           }
-        }, 100);
+        }, 120);
         return r;
       };
       window.go.__ctrlHook = true;
     }
   }, 400);
 
-  console.log('[AntPro] controller-fix v3 \u2014 no blink + current-round chips only');
+  console.log('[AntPro] controller-fix v4 \u2014 no blink');
 })();
