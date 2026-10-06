@@ -1,4 +1,4 @@
-/* AntPro cricket-fix — LIVE ONLY matches + scores + sessions (Cricbuzz first) */
+/* AntPro cricket-fix — LIVE matches + scores + sessions + match open fix */
 (function () {
   'use strict';
   if (typeof state === 'undefined') return;
@@ -20,7 +20,7 @@
     }
     var teams = String((m && m.teams) || 'Unknown v Unknown');
     var parts = teams.split(/\s+v(?:s)?\.?\s+/i);
-    var score = String((m && m.score) || '—');
+    var score = String((m && m.score) || '\u2014');
     var scoreParts = score.split(/\s+-\s+/);
     var status = String((m && m.status) || 'UPCOMING').toLowerCase();
     var statusText = String((m && (m.statusText || m.status_text || m.status)) || status);
@@ -30,8 +30,8 @@
       name: teams,
       home: parts[0] || teams,
       away: parts.slice(1).join(' v ') || '',
-      homeScore: scoreParts[0] && scoreParts[0] !== '—' && scoreParts[0] !== '-' ? scoreParts[0] : '',
-      awayScore: scoreParts[1] && scoreParts[1] !== '—' && scoreParts[1] !== '-' ? scoreParts[1] : '',
+      homeScore: scoreParts[0] && scoreParts[0] !== '\u2014' && scoreParts[0] !== '-' ? scoreParts[0] : '',
+      awayScore: scoreParts[1] && scoreParts[1] !== '\u2014' && scoreParts[1] !== '-' ? scoreParts[1] : '',
       score: score,
       status: live ? 'live' : status,
       statusText: statusText,
@@ -66,9 +66,9 @@
       return {
         id: id,
         name: label,
-        not: s.no_run != null ? s.no_run : (s.not != null ? s.not : '—'),
-        yes: s.yes_run != null ? s.yes_run : (s.yes != null ? s.yes : '—'),
-        rate: s.rate != null ? s.rate : '—',
+        not: s.no_run != null ? s.no_run : (s.not != null ? s.not : '\u2014'),
+        yes: s.yes_run != null ? s.yes_run : (s.yes != null ? s.yes : '\u2014'),
+        rate: s.rate != null ? s.rate : '\u2014',
         status: s.status || 'SUSPENDED',
         result: s.result || s.winner || s.outcome || ''
       };
@@ -79,6 +79,64 @@
     return (list || []).filter(function (m) {
       return m && (m.live === true || isLiveStatus(m.status, m.statusText));
     });
+  }
+
+  /** Safe open match detail — string ids work (cricbuzz-123 etc.) */
+  window.openCricketMatch = function openCricketMatch(idOrName) {
+    try {
+      var list = state.liveMatches || [];
+      var key = idOrName;
+      var m = list.find(function (x) {
+        return String(x.id) === String(key) || x.name === key;
+      });
+      if (!m && list.length) {
+        // fallback: try index
+        var n = Number(key);
+        if (!isNaN(n) && list[n]) m = list[n];
+      }
+      if (!m) {
+        if (typeof toast === 'function') toast('Match not found');
+        return;
+      }
+      state.matchId = m.id;
+      state.currentMatchName = m.name || '';
+      if (typeof go === 'function') go('match');
+      else {
+        state.view = 'match';
+        if (typeof render === 'function') render();
+      }
+      setTimeout(function () {
+        if (typeof window.fetchMatchSessions === 'function') window.fetchMatchSessions(m.name);
+        else if (typeof fetchCricketSessions === 'function') fetchCricketSessions(m.name);
+      }, 60);
+    } catch (e) {
+      console.warn('[AntPro] openCricketMatch failed', e);
+    }
+  };
+
+  // Capture-phase click: fix broken onclick="state.matchId=cricbuzz-123" (unquoted string id)
+  if (!window.__antproMatchClickFix) {
+    window.__antproMatchClickFix = true;
+    document.addEventListener('click', function (e) {
+      var row = e.target && e.target.closest && e.target.closest('.match-row');
+      if (!row) return;
+      // Prefer explicit data attribute if present
+      var dataId = row.getAttribute('data-match-id');
+      var nameEl = row.querySelector('.name');
+      var name = nameEl ? String(nameEl.textContent || '').trim() : '';
+      var list = (typeof state !== 'undefined' && state.liveMatches) || [];
+      var m = null;
+      if (dataId) {
+        m = list.find(function (x) { return String(x.id) === String(dataId); });
+      }
+      if (!m && name) {
+        m = list.find(function (x) { return x.name === name; });
+      }
+      if (!m) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.openCricketMatch === 'function') window.openCricketMatch(m.id);
+    }, true);
   }
 
   window.fetchLiveCricket = async function fetchLiveCricket() {
@@ -157,8 +215,9 @@
         } catch (e2) {}
       }
 
-      // STRICT: only live matches
-      list = onlyLive(list);
+      // Prefer live, but if none, still show whatever list we have so user can open details
+      var liveOnly = onlyLive(list);
+      list = liveOnly.length ? liveOnly : list;
 
       list.sort(function (a, b) {
         function rank(s) { return s === 'live' ? 0 : s === 'upcoming' ? 1 : 2; }
@@ -167,7 +226,7 @@
 
       state.liveMatches = list;
       if (typeof settleOpenCricketBets === 'function') settleOpenCricketBets(list);
-      if (!list.length) state.liveMatchesError = 'No live matches right now';
+      if (!list.length) state.liveMatchesError = 'No matches right now';
       else state.liveMatchesError = '';
     } catch (e) {
       state.liveMatchesError = 'Live feed temporarily unavailable';
@@ -231,5 +290,5 @@
     if (typeof window.fetchLiveCricket === 'function') window.fetchLiveCricket();
   }, 600);
 
-  console.log('[AntPro] cricket-fix ready — LIVE only + sessions');
+  console.log('[AntPro] cricket-fix ready \u2014 match open fix + LIVE sessions');
 })();
