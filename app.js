@@ -408,12 +408,12 @@ async function syncLiveBets(){
     }
   }catch{}
   finally{state.liveBetsLoading=false;sharedBetsBusy=false}
-  if(state.view==='livebets'||(state.view==='admin'&&state.adminAuthed))render();
+  if(state.view==='livebets'||(state.view==='admin'&&state.adminAuthed)||['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render();
 }
 setTimeout(syncSharedRounds,50);
 window.__antproLegacyRoundSync=setInterval(syncSharedRounds,1000);
 setTimeout(syncLiveBets,150);
-window.__antproLiveBetsSync=setInterval(syncLiveBets,2500);
+window.__antproLiveBetsSync=setInterval(syncLiveBets,500);
 
 (function initRoute(){
   const p=(location.pathname.replace(/\/$/,'')||'/').toLowerCase();
@@ -950,7 +950,8 @@ function betAmountFor(key,side){
   const bets=[];
   (state.activeBets||[]).forEach(b=>bets.push(b));
   const pending=state.pendingBets&&state.pendingBets[key]||[];pending.forEach(b=>bets.push(b));
-  return bets.filter(b=>(b.gameKey===key||({AndarBahar:'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'})[b.type]===key)&&(b.team||b.side)===side&&(b.status==='open'||b.status==='pending')).reduce((n,b)=>n+(Number(b.amt)||0),0);
+  const round=ensureRound(key),roundId=String(round?.roundId||'');
+  return bets.filter(b=>(b.gameKey===key||({AndarBahar:'andar-bahar','LUCKY 7':'lucky7','TEEN PATTI':'teen-patti','DRAGON TIGER':'dragon-tiger'})[b.type]===key)&&String(b.roundId||'')===roundId&&(b.team||b.side)===side&&(b.status==='open'||b.status==='pending')).reduce((n,b)=>n+(Number(b.amt)||0),0);
 }
 function casinoResultBanner(key){
   const r=ensureRound(key),winner=r&&r.result||state.previousResults&&state.previousResults[key]&&state.previousResults[key].winner;
@@ -1021,7 +1022,7 @@ function home(){
   ];
   return `<div class="home-grid">${tiles.map(t=>`
     <div class="home-tile" onclick="go('${t.view}')">
-      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}.svg" alt="${t.label}"></div>
+      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}-4k.png" alt="${t.label}" decoding="async"></div>
       <label>${t.label}</label>
     </div>`).join('')}</div>`;
 }
