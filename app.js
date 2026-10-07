@@ -413,7 +413,7 @@ async function syncLiveBets(){
 setTimeout(syncSharedRounds,50);
 window.__antproLegacyRoundSync=setInterval(syncSharedRounds,1000);
 setTimeout(syncLiveBets,150);
-window.__antproLiveBetsSync=setInterval(syncLiveBets,500);
+window.__antproLiveBetsSync=setInterval(syncLiveBets,1500);
 
 (function initRoute(){
   const p=(location.pathname.replace(/\/$/,'')||'/').toLowerCase();
@@ -1013,7 +1013,7 @@ function home(){
   ];
   return `<div class="home-grid">${tiles.map(t=>`
     <div class="home-tile" onclick="go('${t.view}')">
-      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}-4k.png" alt="${t.label}" decoding="async"></div>
+      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}-4k.png" alt="${t.label}" loading="lazy" decoding="async"></div>
       <label>${t.label}</label>
     </div>`).join('')}</div>`;
 }
@@ -1319,13 +1319,13 @@ function casino(){
     <h3>Virtual Casino</h3>
     <div class="casino-grid virtual-grid">${virtual.map(([n,v,a,file])=>`
       <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}">
+        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}" loading="lazy" decoding="async">
       </div>`).join('')}</div>
     <h3>Live Casino</h3>
     <div class="casino-grid">${liveGames.map(([n,v,k,a,file])=>{
       const on=k?live[k]!==false:true;
       return `<div class="casino-tile ${on?'':'off'}" onclick="${on&&['andar','lucky7','teenpatti','dragontiger'].includes(v)?`go('${v}')`:'toast(\'Coming soon\')'}">
-        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}">
+        <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}" loading="lazy" decoding="async">
       </div>`;
     }).join('')}</div>
   </div>${back()}`;

@@ -87,6 +87,7 @@
 
 /* Final polish: transparent home artwork and a never-stalling scrolling announcement. */
 .home-tile .icon-wrap img{object-fit:contain;mix-blend-mode:normal;background:transparent;border:0;box-shadow:none}
+.home-tile{content-visibility:auto;contain-intrinsic-size:138px}.home-tile img,.casino-art{content-visibility:auto}
 .marquee-bar span{padding-left:0;animation:marqClean 13s linear infinite;will-change:transform}
 
 /* Login landing rules screen: compact mobile-first reference layout. */
