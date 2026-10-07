@@ -993,18 +993,8 @@ function doLogin(){
   state.user=acc;
   state.loggedIn=true;
   sessionStorage.setItem('antpro_user',JSON.stringify(acc));
-  if(acc.role==='supermaster'){
-    go('home');
-  } else if(acc.role==='master'){
-    go('home');
-  } else if(acc.role==='agent'){
-    // Agents land on the dashboard-style home with member stats and active matches.
-    go('agent');
-  } else {
-    if(typeof acc.chips==='number') setCoins(acc.chips);
-    state.welcome=true;
-    go('home');
-  }
+  if(acc.role==='player'&&typeof acc.chips==='number') setCoins(acc.chips);
+  go('rules');
   toast(acc.role.toUpperCase()+' login OK');
 }
 function welcomeModal(){return `<div class="modal-overlay" onclick="if(event.target===this){state.welcome=false;render()}"><div class="welcome-modal"><button class="modal-x" onclick="state.welcome=false;render()">×</button><h3>Welcome to antpro999</h3><p><b>Dear Client,</b></p><p>Please verify that you are using the correct official website. Duplicate websites may misuse your login details. Never share your password or OTP with anyone.</p><p>कृपया सही वेबसाइट का ही उपयोग करें और अपना पासवर्ड किसी के साथ साझा न करें।</p><button class="btn-green" onclick="state.welcome=false;render()">Close</button></div></div>`}
@@ -1030,33 +1020,10 @@ function home(){
 
 /* ===== RULES (Hindi default like video) ===== */
 function rules(){
-  return `${topBtn()}
-  <div class="view-title">RULES & REGULATION</div>
-  <div class="rules-tabs">
-    <button class="${state.rules==='hindi'?'active':''}" onclick="state.rules='hindi';render()">Hindi</button>
-    <button class="${state.rules==='english'?'active':''}" onclick="state.rules='english';render()">English</button>
-  </div>
-  <div class="rules-body">${state.rules==='hindi'?`
-    <p><b>NOTE-</b></p>
-    <p>1. सभी डीलर्स से निवेदन है कि क्लाइंट्स को साइट के रूल्स समझाने के बाद ही सौदे करवायें।</p>
-    <p>2. अगर आप इस एग्रीमेंट को एक्सेप्ट नहीं करते हो तो कोई सौदा नहीं कीजिये।</p>
-    <p>3. सर्वर या वेबसाइट में किसी तरह की खराबी आने या बंद हो जाने पर केवल किए गए सौदे ही मान्य होंगे। ऐसी स्थिति में किसी तरह का वाद-विवाद मान्य नहीं होगा।</p>
-    <p>कंपनी के पास अधिकार है कि वे किसी भी ऐड/शर्तों को निलंबित/रद्द करें अगर यह गलतफहमी साबित होता है।</p>
-    <p><b>BOOKMAKER</b></p>
-    <p>• किसी भी कारण से किसी भी टीम को फायदा होगा या नुकसान, इसमें हमारी कोई जवाबदारी नहीं है।</p>
-    <p>• कंपनी के पास किसी भी आईडी/बेट्स को हटाने/शून्य करने का अधिकार है।</p>
-    <p><b>CASINO RULES</b></p>
-    <p>1. यदि किसी कैसीनो गेम में किसी टेक्निकल इशू की वजह से रिजल्ट नहीं आता है तो उस गेम के लगाए गए कॉइन्स वापिस कर दिए जाएंगे।</p>
-    <p><b>FANCY RULES</b></p>
-    <p>1. मैच टाई होने पर सभी फैंसी बेट्स मान्य होंगी।</p>
-    <p>2. टॉस या खराब मौसम की स्थिति से पहले सभी एडवांस फैंसी सस्पेंड कर दी जाएगी।</p>
-  `:`
-    <p><b>NOTE-</b></p>
-    <p>1. All dealers must explain site rules to clients before taking any bets.</p>
-    <p>2. If you do not accept this agreement, do not place any bets.</p>
-    <p>3. In case of server/website failure only already placed bets will be valid.</p>
-    <p><b>BOOKMAKER / CASINO / FANCY</b> rules apply as per management decision. Final decision rests with management.</p>
-  `}</div>${back()}`;
+  const hindi=`<p class="rules-intro">कृपया नियमों को समझने के लिए यहां कुछ मिनट दें, और अपने अनुसार समझ लें ।</p><h3>NOTE-</h3><ul><li>सभी डीलर्स से निवेदन है कि क्लाइंट्स को साइट के रूल्स समझाने के बाद ही सौदे करवायें।</li><li>अगर आप इस एग्रीमेंट को ऐक्सेप्ट नहीं करते हैं तो कोई सौदा नहीं कीजिये।</li><li>सर्वर या वेबसाइट में किसी तरह की खराबी आने या बंद हो जाने पर केवल किए गए सौदे ही मान्य होंगे। ऐसी स्थिति में किसी तरह का वाद-विवाद मान्य नहीं होगा।</li><li>कंपनी के पास अधिकार है कि वे किसी भी ऐड/शर्तों को निलंबित/रद्द करें अगर यह गलतफहमी साबित होता है।</li></ul><h3>BOOKMAKER</h3><ul><li>किसी भी कारण से किसी भी टीम को फायदा होगा या नुकसान, इसमें हमारी कोई जवाबदारी नहीं है।</li><li>कंपनी के पास किसी भी आईडी/बेट्स को हटाने/शून्य करने का अधिकार है, यदि वह अमान्य पाया जाता है।</li><li>रिजल्ट या सेशन के बारे में किसी भी प्रश्न के लिए रिजल्ट के 4 दिनों के भीतर संपर्क किया जाना चाहिए।</li><li>यदि दो टीमों के अंक समान होते हैं, तो रिजल्ट पॉइंट टेबल के आधार पर दिया जाएगा।</li><li>वीडियो बाधित होने पर बुकमेकर बाजार रद्द किया जा सकता है।</li></ul><h3>CASINO RULES</h3><ul><li>यदि किसी कैसीनो गेम में किसी टेक्निकल इशू की वजह से रिजल्ट नहीं आता है तो उस गेम के क्लाइंट को कॉइन वापिस कर दिए जायेंगे।</li></ul><h3>FANCY RULES</h3><ul><li>मैच टाई होने पर सभी फैंसी बेट्स मान्य होंगी।</li><li>टॉस या खराब मौसम की स्थिति से पहले सभी एडवांस फैंसी सस्पेंड कर दी जाएंगी।</li><li>टेक्निकल एरर में मैनेजमेंट का निर्णय अंतिम होगा।</li><li>मैनुअल बेट्स फोन कॉल के द्वारा स्वीकार नहीं किए जाते हैं।</li><li>पासवर्ड बदलने की जिम्मेदारी यूजर की होती है। गलत गतिविधि मिलने पर आईडी ब्लॉक की जा सकती है।</li></ul><h3>BOWLER RUN FANCY</h3><ul><li>फैंसी में केवल टोटल बॉलर द्वारा दिए गए रन ही मान्य होंगे। लेग बाई और बाई रन ऐड नहीं किए जाएंगे।</li></ul><h3>TEST RULES</h3><ul><li>एडवांस सेशन टेस्ट में मान्य है।</li><li>टेस्ट मैच में दोनों इनिंग में एडवांस फैंसी मान्य हैं।</li></ul>`;
+  const english=`<p class="rules-intro">Please take a few minutes to understand the rules and use the site accordingly.</p><h3>NOTE-</h3><ul><li>Dealers must explain the site rules to clients before accepting bets.</li><li>If you do not accept this agreement, do not place any bets.</li><li>In case of server or website failure, only already placed bets will be valid.</li></ul><h3>BOOKMAKER</h3><ul><li>The company is not responsible for any team advantage or loss.</li><li>Invalid IDs or bets may be removed or voided according to management decision.</li><li>Questions about a result or session must be raised within 4 days.</li></ul><h3>CASINO RULES</h3><ul><li>If a casino result is not entered due to a technical issue, the client coins will be returned.</li></ul><h3>FANCY RULES</h3><ul><li>All exchange and management decisions are final.</li><li>Manual bets by phone call are not accepted.</li><li>The user is responsible for changing and protecting the password.</li></ul>`;
+  const coins=state.user?.role==='player'?getCoins():(state.user?.chips||0);
+  return `<div class="rules-page"><div class="rules-balancebar">Chips: ${Number(coins).toFixed(2)} <span>Expo : 0.00</span></div><div class="rules-main-menu" onclick="go('home')">MAIN MENU</div><div class="rules-tabs"><button class="${state.rules==='hindi'?'active':''}" onclick="state.rules='hindi';render()">Hindi</button><button class="${state.rules==='english'?'active':''}" onclick="state.rules='english';render()">English</button></div><section class="rules-body">${state.rules==='hindi'?hindi:english}</section></div>`;
 }
 
 /* ===== IN PLAY ===== */
@@ -2141,7 +2108,7 @@ function view(){
     return shell(hierarchyDetails());
   }
   if(state.view==='home')return shell(state.user&&state.user.role!=='player'?staffHome():home());
-  if(state.view==='rules')return shell(rules());
+  if(state.view==='rules')return rules();
   if(state.view==='inplay')return shell(inplay());
   if(state.view==='match')return shell(match());
   if(state.view==='casino')return shell(casino());

@@ -88,6 +88,20 @@
 /* Final polish: transparent home artwork and a never-stalling scrolling announcement. */
 .home-tile .icon-wrap img{object-fit:contain;mix-blend-mode:normal;background:transparent;border:0;box-shadow:none}
 .marquee-bar span{padding-left:0;animation:marqClean 13s linear infinite;will-change:transform}
+
+/* Login landing rules screen: compact mobile-first reference layout. */
+.rules-page{min-height:100vh;background:#eee;color:#111;padding:18px 7px 32px;font-family:Arial,sans-serif}
+.rules-balancebar{height:28px;margin:-18px -7px 10px;background:#fff;text-align:center;padding:6px 0 4px;color:#222;font-size:12px;border-bottom:1px solid #ddd}
+.rules-balancebar span{color:#d00000}
+.rules-main-menu{width:160px;margin:0 auto 5px;padding:14px 10px;border-radius:28px;background:#8b6500;color:#fff;text-align:center;font-size:13px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 2px 4px #0002}
+.rules-tabs{display:flex;justify-content:center;gap:5px;margin:0 auto 8px}
+.rules-tabs button{border:1px solid #777;background:#bfc0c2;color:#111;padding:5px 10px;font-size:12px;font-style:italic;cursor:pointer}
+.rules-tabs button.active{background:#9d9fa1}
+.rules-body{max-width:760px;margin:0 auto;font-size:12px;line-height:1.35;font-weight:600}
+.rules-body .rules-intro{text-align:center;font-size:18px;font-weight:800;font-style:italic;margin:8px 0 12px}
+.rules-body h3{font-size:18px;font-style:italic;margin:12px 0 5px}
+.rules-body ul{margin:0 0 8px;padding-left:25px}.rules-body li{padding:4px 0 4px 2px}
+@media(max-width:600px){.rules-page{padding:10px 7px 24px}.rules-balancebar{margin:-10px -7px 10px}.rules-main-menu{width:155px;padding:12px 8px}.rules-body{font-size:11px}.rules-body .rules-intro{font-size:16px}.rules-body h3{font-size:17px}}
 @keyframes marqClean{0%{transform:translateX(0)}100%{transform:translateX(-33.3333%)}}
 
 /* Professional session stake controls: virtual/paper coins only. */
