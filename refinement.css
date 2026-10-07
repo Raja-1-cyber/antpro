@@ -91,7 +91,8 @@
 
 /* Login landing rules screen: compact mobile-first reference layout. */
 .rules-page{min-height:100vh;background:#eee;color:#111;padding:18px 7px 32px;font-family:Arial,sans-serif}
-.rules-balancebar{height:28px;margin:-18px -7px 10px;background:#fff;text-align:center;padding:6px 0 4px;color:#222;font-size:12px;border-bottom:1px solid #ddd}
+.rules-topbar{min-height:42px;margin:-18px -7px 0;padding:5px 8px;background:#8b6500;color:#fff;display:flex;align-items:center;gap:10px;position:relative}.rules-topbar img{width:92px;height:31px;object-fit:contain;background:#fff;border-radius:2px}.rules-topbar strong{flex:1;text-align:center;font-size:12px}.rules-actions{display:flex;gap:4px}.rules-actions button{border:1px solid #ffe58a;background:#6d4d00;color:#fff;border-radius:3px;padding:6px 5px;font-size:9px;font-weight:700;cursor:pointer}
+.rules-balancebar{height:28px;margin:0 -7px 10px;background:#fff;text-align:center;padding:6px 0 4px;color:#222;font-size:12px;border-bottom:1px solid #ddd}
 .rules-balancebar span{color:#d00000}
 .rules-main-menu{width:160px;margin:0 auto 5px;padding:14px 10px;border-radius:28px;background:#8b6500;color:#fff;text-align:center;font-size:13px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 2px 4px #0002}
 .rules-tabs{display:flex;justify-content:center;gap:5px;margin:0 auto 8px}
@@ -101,7 +102,7 @@
 .rules-body .rules-intro{text-align:center;font-size:18px;font-weight:800;font-style:italic;margin:8px 0 12px}
 .rules-body h3{font-size:18px;font-style:italic;margin:12px 0 5px}
 .rules-body ul{margin:0 0 8px;padding-left:25px}.rules-body li{padding:4px 0 4px 2px}
-@media(max-width:600px){.rules-page{padding:10px 7px 24px}.rules-balancebar{margin:-10px -7px 10px}.rules-main-menu{width:155px;padding:12px 8px}.rules-body{font-size:11px}.rules-body .rules-intro{font-size:16px}.rules-body h3{font-size:17px}}
+@media(max-width:600px){.rules-page{padding:10px 7px 24px}.rules-topbar{margin:-10px -7px 0;padding:5px 6px;gap:5px}.rules-topbar img{width:76px}.rules-topbar strong{font-size:11px}.rules-actions button{padding:6px 4px;font-size:8px}.rules-balancebar{margin:0 -7px 10px}.rules-main-menu{width:155px;padding:12px 8px}.rules-body{font-size:11px}.rules-body .rules-intro{font-size:16px}.rules-body h3{font-size:17px}}
 @keyframes marqClean{0%{transform:translateX(0)}100%{transform:translateX(-33.3333%)}}
 
 /* Professional session stake controls: virtual/paper coins only. */
