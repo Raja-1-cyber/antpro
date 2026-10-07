@@ -370,7 +370,8 @@ const state={
   liveMatchesError: '',
   liveSessions: [], liveSessionsKey: '', liveSessionsLoading: false,
   serverBets: [], liveBetsLoading: false,
-  abJoker:null, abHistory:[], l7Card:{v:'7',s:'red',suit:'♥'}, l7Spin:false,
+  abJoker:null, abHistory:[], l7History:[], l7Card:{v:'7',s:'red',suit:'♥'}, l7Spin:false,
+  tpHistory:[], dtHistory:[],
   tpPlayer:[{v:'A',s:'red',suit:'♥'},{v:'8',s:'',suit:'♣'},{v:'4',s:'red',suit:'♦'}], tpDealer:[{v:'K',s:'',suit:'♠'},{v:'6',s:'red',suit:'♥'},{v:'2',s:'',suit:'♣'}], tpSpin:false,
   dtDragon:{v:'8',s:'',suit:'♣'}, dtTiger:{v:'6',s:'',suit:'♣'}, dtSpin:false, resolving:{}, sharedRounds:{}
 };
@@ -1351,6 +1352,10 @@ function cardHTML(c){
   if(!c) return '<div class="p-card ghost">?</div>';
   return `<div class="p-card ${c.s||''}">${c.v}<br><small>${c.suit||''}</small></div>`;
 }
+function casinoLastResult(history,fallback){
+  const values=Array.isArray(history)&&history.length?history:fallback;
+  return `<div class="completed-bets">Completed Casino Bets</div><div class="section-gold result-heading"><span>Last Result</span><span>View All</span></div><div class="last-result">${values.slice(0,10).map(x=>`<div class="result-dot">${escapeHTML(String(x))}</div>`).join('')}</div>`;
+}
 
 function andar(){
   const live=getGamesLive()['andar-bahar'];
@@ -1405,7 +1410,7 @@ function lucky7(){
       <div class="bet-lock-row"><div class="side">7 DOWN</div><div class="amt">${betAmountFor('lucky7','7 DOWN')}</div><div class="lock" onclick="playLucky7('7 DOWN')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${casinoLastResult(state.l7History,['U','D','U','D','U','D','U','D','U','D'])}
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='LUCKY 7').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1417,7 +1422,7 @@ function playLucky7(side){
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'LUCKY 7',rate,amt);state.l7Spin=true;state.l7Card=null;render();
   setTimeout(()=>{
     const card=freshDeck()[0];state.l7Card=card;state.l7Spin=false;render();
-    setTimeout(()=>{const natural=cardRank(card)>7?'7 UP':cardRank(card)<7?'7 DOWN':'7',winSide=smartDecision(key,['7 UP','7','7 DOWN'],natural),won=side===winSide,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'LUCKY 7',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON · card '+card.v:'LOST · card '+card.v);finishRound(key);render()},RESULT_HOLD_MS);
+    setTimeout(()=>{const natural=cardRank(card)>7?'7 UP':cardRank(card)<7?'7 DOWN':'7',winSide=smartDecision(key,['7 UP','7','7 DOWN'],natural),won=side===winSide,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.l7History.unshift(winSide==='7 UP'?'U':winSide==='7 DOWN'?'D':'7');state.l7History=state.l7History.slice(0,30);pushSettledBet({team:side,type:'LUCKY 7',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON · card '+card.v:'LOST · card '+card.v);finishRound(key);render()},RESULT_HOLD_MS);
   },CARD_GAP_MS);
 }
 function teenpatti(){
@@ -1436,7 +1441,7 @@ function teenpatti(){
       <div class="bet-lock-row"><div class="side">Team B</div><div class="amt">${betAmountFor('teen-patti','Team B')}</div><div class="lock" onclick="playTeenPatti('Team B')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${casinoLastResult(state.tpHistory,['A','B','A','B','A','B','A','B','A','B'])}
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='TEEN PATTI').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1462,7 +1467,7 @@ function playTeenPatti(side){
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'TEEN PATTI',rate,amt);state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();
   const deck=freshDeck(),player=[deck.pop(),deck.pop(),deck.pop()],dealer=[deck.pop(),deck.pop(),deck.pop()];let step=0;
-  const settle=()=>{const ps=handScore(player),ds=handScore(dealer),natural=ps>ds?'Team A':ds>ps?'Team B':'Tie',result=smartDecision(key,['Team A','Tie','Team B'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'TEEN PATTI',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.tpSpin=false;toast(won?side+' WON':'LOST · '+result);finishRound(key);render()};
+  const settle=()=>{const ps=handScore(player),ds=handScore(dealer),natural=ps>ds?'Team A':ds>ps?'Team B':'Tie',result=smartDecision(key,['Team A','Tie','Team B'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.tpHistory.unshift(result==='Team A'?'A':result==='Team B'?'B':'T');state.tpHistory=state.tpHistory.slice(0,30);pushSettledBet({team:side,type:'TEEN PATTI',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.tpSpin=false;toast(won?side+' WON':'LOST · '+result);finishRound(key);render()};
   const reveal=()=>{if(step%2===0)state.tpPlayer.push(player[Math.floor(step/2)]);else state.tpDealer.push(dealer[Math.floor(step/2)]);step++;render();if(step<6)setTimeout(reveal,CARD_GAP_MS);else setTimeout(settle,RESULT_HOLD_MS)};
   setTimeout(reveal,CARD_GAP_MS);
 }
@@ -1482,7 +1487,7 @@ function dragontiger(){
       <div class="bet-lock-row"><div class="side">Tiger</div><div class="amt">${betAmountFor('dragon-tiger','Tiger')}</div><div class="lock" onclick="playDragonTiger('Tiger')">🔒</div></div>
       <div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go('casino')">BACK</div></div>
     </div>
-    <div class="completed-bets">Completed Casino Bets</div>
+    ${casinoLastResult(state.dtHistory,['T','D','T','D','T','D','T','D','T','D'])}
     <div class="section-gold">My Bet</div>
     <table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead>
     <tbody>${state.activeBets.filter(x=>x.type==='DRAGON TIGER').slice(0,5).map(x=>`<tr><td>${x.team}</td><td>${x.rate}</td><td>${x.amt}</td><td>${x.result||x.profit}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">—</td></tr>'}</tbody></table>
@@ -1493,7 +1498,7 @@ function playDragonTiger(side){
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'DRAGON TIGER',rate,amt);state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();
   const deck=freshDeck(),dragon=deck.pop(),tiger=deck.pop();
-  setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
+  setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.dtHistory.unshift(result==='Dragon'?'D':result==='Tiger'?'T':'TIE');state.dtHistory=state.dtHistory.slice(0,30);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
 }
 function matka(){return `${topBtn()}<div class="view-title">MATKA</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
 function aviator(){return `${topBtn()}<div class="view-title">AVIATOR</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
