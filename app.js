@@ -296,23 +296,33 @@ function bettingOpen(key){
 }
 function startNewRoundSilent(key,secs=30){
   const all=getLiveRounds();
+  const current=all[key];
+  if(current&&['betting','locked','revealing'].includes(current.phase))return current;
+  if(current&&current.phase==='result'&&Date.now()-Number(current.resultAt||0)<RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS)return current;
   all[key]={roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:secs,duration:secs,lockSeconds:GAME_TIMINGS[key]?.lock??4,forcedWinner:null,startedAt:Date.now()};
   setLiveRounds(all);
+  return all[key];
 }
 function scheduleNextRound(key,delay=NEXT_ROUND_DELAY_MS){
   clearTimeout(scheduleNextRound.timers?.[key]);
   scheduleNextRound.timers=scheduleNextRound.timers||{};
   scheduleNextRound.timers[key]=setTimeout(()=>{startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);state.resolving[key]=false;render()},delay);
 }
-function finishRound(key){
+function publishRoundResult(key,winner,roundId){
+  fetch('/api/live-rounds/'+encodeURIComponent(key)+'/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({winner,roundId:roundId||ensureRound(key).roundId})}).catch(()=>{});
+}
+function finishRound(key,winner){
   const all=getLiveRounds(), r=all[key]||ensureRound(key);
+  if(r.phase==='result'&&r.resultAt)return r;
   r.phase='result';r.timer=0;r.resultAt=Date.now();all[key]=r;setLiveRounds(all);
+  if(winner){r.result=winner;publishRoundResult(key,winner,r.roundId)}
   setTimeout(()=>scheduleNextRound(key,NEXT_ROUND_DELAY_MS),RESULT_HOLD_MS);
+  return r;
 }
 function smartDecision(key,options,natural){
   const forced=getForced(key);
   if(forced&&options.includes(forced)){
-    const all=getLiveRounds();if(all[key]){all[key].forcedWinner=null;all[key].phase='result';setLiveRounds(all)}
+    const all=getLiveRounds();if(all[key]){all[key].forcedWinner=null;setLiveRounds(all)}
     return forced;
   }
   return natural||options[Math.floor(Math.random()*options.length)];
@@ -339,11 +349,15 @@ function tickRounds(){
     if(r.phase==='betting'&&!bettingOpen(key)){
       r.phase='locked';r.timer=roundSeconds(key);r.lockedAt=Date.now();const all=getLiveRounds();all[key]=r;setLiveRounds(all);
       clearTimeout(tickRounds.timers[key]);
-      tickRounds.timers[key]=setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},Math.max(100,(r.timer||0)*1000+100));
+      tickRounds.timers[key]=setTimeout(()=>{const now=getLiveRounds()[key];if(now&&now.phase==='locked'){tickRounds();if(['andar','lucky7','teenpatti','dragontiger'].includes(state.view))render()}},Math.max(100,(r.timer||0)*1000+100));
     }
-    if(r.phase==='locked'&&roundSeconds(key)<=0){
+    if(r.phase==='locked'&&roundSeconds(key)<=0&&!state.resolving[key]){
       clearTimeout(tickRounds.timers[key]);
-      startNewRoundSilent(key,GAME_TIMINGS[key]?.duration||30);
+      const options=key==='andar-bahar'?['Andar','Bahar']:key==='lucky7'?['7 UP','7','7 DOWN']:key==='teen-patti'?['Team A','Tie','Team B']:['Dragon','Tie','Tiger'];
+      const forced=getForced(key);let h=0;for(const ch of String(r.roundId||key))h=(h*31+ch.charCodeAt(0))>>>0;
+      const winner=forced&&options.includes(forced)?forced:options[h%options.length];
+      const all=getLiveRounds(),current=all[key]||r;current.phase='result';current.result=winner;current.forcedWinner=null;current.resultAt=Date.now();current.timer=0;all[key]=current;setLiveRounds(all);publishRoundResult(key,winner,current.roundId);
+      scheduleNextRound(key,RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS);
     }
     if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=RESULT_HOLD_MS+NEXT_ROUND_DELAY_MS){
       clearTimeout(tickRounds.timers[key]);
@@ -1389,7 +1403,7 @@ function playAndarBahar(side){
   setTimeout(()=>{
     const deck=freshDeck(),joker=deck.pop();state.abJoker=joker;render();
     const andar=[],bahar=[];let first='Andar',winner=null;
-    const settle=()=>{winner=smartDecision(key,['Andar','Bahar'],winner);const won=side===winner,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.abHistory=state.abHistory||[];state.abHistory.unshift(winner==='Andar'?'A':'B');pushSettledBet({team:side,type:'AndarBahar',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.andarSpinning=false;toast(won?side+' WON · '+winner:'LOST · '+winner);finishRound(key);render()};
+    const settle=()=>{winner=smartDecision(key,['Andar','Bahar'],winner);const won=side===winner,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.abHistory=state.abHistory||[];state.abHistory.unshift(winner==='Andar'?'A':'B');pushSettledBet({team:side,type:'AndarBahar',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.andarSpinning=false;toast(won?side+' WON · '+winner:'LOST · '+winner);finishRound(key,winner);render()};
     const reveal=()=>{const c=deck.pop();if(first==='Andar')andar.push(c);else bahar.push(c);if(c.v===joker.v)winner=first;first=first==='Andar'?'Bahar':'Andar';state.andarCards={andar:[...andar],bahar:[...bahar]};render();if(!winner&&deck.length)setTimeout(reveal,CARD_GAP_MS);else setTimeout(settle,RESULT_HOLD_MS)};
     setTimeout(reveal,CARD_GAP_MS);
   },CARD_GAP_MS);
@@ -1422,7 +1436,7 @@ function playLucky7(side){
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'LUCKY 7',rate,amt);state.l7Spin=true;state.l7Card=null;render();
   setTimeout(()=>{
     const card=freshDeck()[0];state.l7Card=card;state.l7Spin=false;render();
-    setTimeout(()=>{const natural=cardRank(card)>7?'7 UP':cardRank(card)<7?'7 DOWN':'7',winSide=smartDecision(key,['7 UP','7','7 DOWN'],natural),won=side===winSide,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.l7History.unshift(winSide==='7 UP'?'U':winSide==='7 DOWN'?'D':'7');state.l7History=state.l7History.slice(0,30);pushSettledBet({team:side,type:'LUCKY 7',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON · card '+card.v:'LOST · card '+card.v);finishRound(key);render()},RESULT_HOLD_MS);
+    setTimeout(()=>{const natural=cardRank(card)>7?'7 UP':cardRank(card)<7?'7 DOWN':'7',winSide=smartDecision(key,['7 UP','7','7 DOWN'],natural),won=side===winSide,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.l7History.unshift(winSide==='7 UP'?'U':winSide==='7 DOWN'?'D':'7');state.l7History=state.l7History.slice(0,30);pushSettledBet({team:side,type:'LUCKY 7',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON · card '+card.v:'LOST · card '+card.v);finishRound(key,winSide);render()},RESULT_HOLD_MS);
   },CARD_GAP_MS);
 }
 function teenpatti(){
@@ -1467,7 +1481,7 @@ function playTeenPatti(side){
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'TEEN PATTI',rate,amt);state.tpSpin=true;state.tpPlayer=[];state.tpDealer=[];render();
   const deck=freshDeck(),player=[deck.pop(),deck.pop(),deck.pop()],dealer=[deck.pop(),deck.pop(),deck.pop()];let step=0;
-  const settle=()=>{const ps=handScore(player),ds=handScore(dealer),natural=ps>ds?'Team A':ds>ps?'Team B':'Tie',result=smartDecision(key,['Team A','Tie','Team B'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.tpHistory.unshift(result==='Team A'?'A':result==='Team B'?'B':'T');state.tpHistory=state.tpHistory.slice(0,30);pushSettledBet({team:side,type:'TEEN PATTI',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.tpSpin=false;toast(won?side+' WON':'LOST · '+result);finishRound(key);render()};
+  const settle=()=>{const ps=handScore(player),ds=handScore(dealer),natural=ps>ds?'Team A':ds>ps?'Team B':'Tie',result=smartDecision(key,['Team A','Tie','Team B'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.tpHistory.unshift(result==='Team A'?'A':result==='Team B'?'B':'T');state.tpHistory=state.tpHistory.slice(0,30);pushSettledBet({team:side,type:'TEEN PATTI',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});state.tpSpin=false;toast(won?side+' WON':'LOST · '+result);finishRound(key,result);render()};
   const reveal=()=>{if(step%2===0)state.tpPlayer.push(player[Math.floor(step/2)]);else state.tpDealer.push(dealer[Math.floor(step/2)]);step++;render();if(step<6)setTimeout(reveal,CARD_GAP_MS);else setTimeout(settle,RESULT_HOLD_MS)};
   setTimeout(reveal,CARD_GAP_MS);
 }
@@ -1498,7 +1512,7 @@ function playDragonTiger(side){
   if(!amt||!canPlaceBet(key))return;if(getCoins()<amt){state.resolving[key]=false;toast('Chips kam hain');return}
   syncPlayerChips(getCoins()-amt);recordOpenCasinoBet(key,side,'DRAGON TIGER',rate,amt);state.dtSpin=true;state.dtDragon=null;state.dtTiger=null;render();
   const deck=freshDeck(),dragon=deck.pop(),tiger=deck.pop();
-  setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.dtHistory.unshift(result==='Dragon'?'D':result==='Tiger'?'T':'TIE');state.dtHistory=state.dtHistory.slice(0,30);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
+  setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.dtHistory.unshift(result==='Dragon'?'D':result==='Tiger'?'T':'TIE');state.dtHistory=state.dtHistory.slice(0,30);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key,result);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
 }
 function matka(){return `${topBtn()}<div class="view-title">MATKA</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
 function aviator(){return `${topBtn()}<div class="view-title">AVIATOR</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
