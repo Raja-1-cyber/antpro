@@ -1,16 +1,16 @@
-/* AntPro controller-fix v7
-   - Steady UI (no admin 1s blink)
-   - Live chips: match current round, fallback open bets for game
-   - Live bets strip so you can see bets arriving
+/* AntPro controller-fix v6
+   ROOT CAUSE (from video): app.js setInterval every 1s calls render() on admin
+   → full old MASTER DECISION PANEL rebuild → swaps with new panel.
+   FIX: debounce/skip admin re-render while controller is open; strip legacy DOM.
 */
 (function () {
   'use strict';
 
   var GAMES = [
     { key: 'andar-bahar', title: 'Andar Bahar', sides: ['Andar', 'Bahar'], types: ['andarbahar', 'andar'] },
-    { key: 'lucky7', title: 'Lucky 7', sides: ['7 UP', '7', '7 DOWN'], types: ['lucky7', 'lucky'] },
-    { key: 'teen-patti', title: 'Teen Patti', sides: ['Team A', 'Team B'], types: ['teenpatti', 'teen'] },
-    { key: 'dragon-tiger', title: 'Dragon Tiger', sides: ['Dragon', 'Tie', 'Tiger'], types: ['dragontiger', 'dragon'] }
+    { key: 'lucky7', title: 'Lucky 7', sides: ['7 UP', '7', '7 DOWN'], types: ['lucky'] },
+    { key: 'teen-patti', title: 'Teen Patti', sides: ['Team A', 'Team B'], types: ['teen'] },
+    { key: 'dragon-tiger', title: 'Dragon Tiger', sides: ['Dragon', 'Tie', 'Tiger'], types: ['dragon'] }
   ];
 
   var cache = { rounds: {}, bets: [], updated: 0, dataSig: '' };
@@ -38,6 +38,7 @@
     return isAdminAuthed() && isControllerRoute();
   }
 
+  /** Stop app.js 1s interval from rebuilding the whole admin page */
   function installRenderDebounce() {
     if (typeof window.render !== 'function' || window.render.__ctrlDebounce) return;
     var orig = window.render;
@@ -45,9 +46,10 @@
       try {
         if (shouldShow()) {
           var now = Date.now();
+          // Allow explicit navigation / first paint only; block 1s interval spam
           if (!allowNextAdminRender && lastAdminFullRender && (now - lastAdminFullRender) < 30000) {
             killLegacyController();
-            return;
+            return; // SKIP full rebuild — this stops the blink
           }
           allowNextAdminRender = false;
           lastAdminFullRender = now;
@@ -62,21 +64,29 @@
 
   function killLegacyController() {
     try {
+      // Override global if app exposed it
       if (typeof window.adminDecisionCards === 'function' && !window.adminDecisionCards.__stub) {
         window.adminDecisionCards = function () { return ''; };
         window.adminDecisionCards.__stub = true;
       }
+
       var app = document.getElementById('app');
       if (!app) return;
+
       app.querySelectorAll(
         '.controller-game-tabs, .controller-game-grid, .controller-game-card, ' +
         '.controller-force-btn, .controller-auto-note, .controller-tab'
       ).forEach(function (el) {
         if (el && el.parentNode) el.parentNode.removeChild(el);
       });
+
       app.querySelectorAll('.admin-section').forEach(function (sec) {
         var text = String(sec.textContent || '');
         if (/MASTER GAME DECISION|Force result|side totals|Decision open until/i.test(text)) {
+          if (sec.getAttribute('data-antpro-gone') === '1') {
+            sec.style.display = 'none';
+            return;
+          }
           sec.setAttribute('data-antpro-gone', '1');
           sec.style.display = 'none';
           sec.innerHTML = '';
@@ -98,14 +108,10 @@
     return s === 'open' || s === 'pending' || s === 'active' || s === '';
   }
 
-  function normType(t) {
-    return String(t || '').toLowerCase().replace(/[\s_-]+/g, '');
-  }
-
   function betBelongsToGame(b, g) {
     var gk = String((b && (b.gameKey || b.game)) || '').toLowerCase();
     if (gk && gk === g.key) return true;
-    var t = normType(b && b.type);
+    var t = String((b && b.type) || '').toLowerCase().replace(/\s+/g, '');
     if (!t) return false;
     return (g.types || []).some(function (x) { return t.indexOf(x) >= 0; });
   }
@@ -121,36 +127,24 @@
     };
   }
 
-  /**
-   * Chips for controller:
-   * 1) Prefer open bets with exact server roundId
-   * 2) If none (client/server roundId drift), fall back to ALL open bets for that game
-   * Settled bets never count. New round settles old → naturally resets.
-   */
   function sideTotals(gameKey, roundId) {
     var g = GAMES.find(function (x) { return x.key === gameKey; }) || { sides: [], types: [] };
-    var byRound = {};
-    var byGame = {};
-    g.sides.forEach(function (s) { byRound[s] = 0; byGame[s] = 0; });
-
+    var totals = {};
+    g.sides.forEach(function (s) { totals[s] = 0; });
+    if (!roundId) return totals;
     (cache.bets || []).forEach(function (b) {
       if (!b || !isOpenBet(b) || !betBelongsToGame(b, g)) return;
+      if (!b.roundId || String(b.roundId) !== String(roundId)) return;
       var side = sideOfBet(b);
       if (!side) return;
-      if (byGame[side] == null) {
+      if (totals[side] == null) {
         var hit = g.sides.find(function (s) { return s.toLowerCase() === side.toLowerCase(); });
         if (!hit) return;
         side = hit;
       }
-      var amt = Math.abs(Number(b.amt || b.amount || b.stake) || 0);
-      byGame[side] += amt;
-      if (roundId && b.roundId && String(b.roundId) === String(roundId)) {
-        byRound[side] += amt;
-      }
+      totals[side] += Math.abs(Number(b.amt || b.amount || b.stake) || 0);
     });
-
-    var strict = g.sides.reduce(function (n, s) { return n + (byRound[s] || 0); }, 0);
-    return strict > 0 ? byRound : byGame;
+    return totals;
   }
 
   function amountClass(totals, side) {
@@ -180,16 +174,7 @@
       var t = sideTotals(g.key, r.roundId);
       parts.push(g.key + '|' + r.roundId + '|' + r.phase + '|' + (r.forcedWinner || '') + '|' + JSON.stringify(t));
     });
-    parts.push('bets:' + (cache.bets || []).filter(isOpenBet).length);
     return parts.join('||');
-  }
-
-  function recentOpenBets(limit) {
-    return (cache.bets || [])
-      .filter(isOpenBet)
-      .slice()
-      .sort(function (a, b) { return (Number(b.ts) || 0) - (Number(a.ts) || 0); })
-      .slice(0, limit || 8);
   }
 
   async function refresh() {
@@ -209,11 +194,7 @@
       }
       if (bRes.ok) {
         var bd = await bRes.json();
-        var list = Array.isArray(bd.bets) ? bd.bets : (Array.isArray(bd) ? bd : []);
-        cache.bets = list;
-        try {
-          if (typeof state !== 'undefined') state.serverBets = list;
-        } catch (e0) {}
+        cache.bets = Array.isArray(bd.bets) ? bd.bets : (Array.isArray(bd) ? bd : []);
       }
       cache.updated = Date.now();
     } catch (e) {}
@@ -261,6 +242,7 @@
     if (root) return root;
     root = document.createElement('div');
     root.id = 'controller-live-root';
+    // Place ABOVE #app so user sees new panel first (not below old junk)
     var app = document.getElementById('app');
     if (app && app.parentNode) app.parentNode.insertBefore(root, app);
     else document.body.insertBefore(root, document.body.firstChild);
@@ -301,13 +283,9 @@
       '<div class="ctrl-root">' +
         '<div class="ctrl-header">' +
           '<div class="ctrl-header-title">AntPro Controller</div>' +
-          '<div class="ctrl-header-sub">Live open chips \u00b7 auto-reset when bets settle \u00b7 force in BETTING/LOCKED</div>' +
+          '<div class="ctrl-header-sub">Current-round chips only \u00b7 force in BETTING/LOCKED</div>' +
         '</div>' +
         '<div class="ctrl-grid">' + cards + '</div>' +
-        '<div class="ctrl-livebets">' +
-          '<div class="ctrl-livebets-title">Live open bets</div>' +
-          '<div class="ctrl-livebets-list" data-role="livebets">\u2014</div>' +
-        '</div>' +
         '<div class="ctrl-foot" data-role="foot">\u2014</div>' +
       '</div>';
 
@@ -333,7 +311,7 @@
       var phase = String(r.phase || '\u2014');
       var totals = sideTotals(g.key, r.roundId);
       var totalAll = g.sides.reduce(function (n, s) { return n + (totals[s] || 0); }, 0);
-      var canForce = phase === 'betting' || phase === 'locked';
+      var canForce = (phase === 'betting' || phase === 'locked') && Number(r.timer) > 0;
 
       var phaseEl = card.querySelector('[data-role="phase"]');
       if (phaseEl) {
@@ -345,46 +323,35 @@
         card.querySelector('[data-role="meta"]'),
         'Round: ' + (r.roundId || '\u2014') +
           ' \u00b7 Timer: ' + (r.timer != null ? r.timer : '\u2014') + 's' +
-          ' \u00b7 Open chips: ' + fmt(totalAll) +
+          ' \u00b7 Chips: ' + fmt(totalAll) +
           (r.forcedWinner ? ' \u00b7 Forced: ' + r.forcedWinner : '')
       );
 
-      // Always refresh amounts (bets can change without phase change)
       setText(card.querySelector('[data-role="hint"]'), canForce ? 'Decision OPEN' : 'Decision locked');
-      g.sides.forEach(function (side) {
-        var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
-        if (!box) return;
-        box.className = 'ctrl-side ctrl-side-' + amountClass(totals, side);
-        setText(box.querySelector('[data-role="amt"]'), fmt(totals[side] || 0));
-        var btn = box.querySelector('.ctrl-force-btn');
-        if (btn) btn.disabled = !canForce;
-      });
+      if (full) {
+        g.sides.forEach(function (side) {
+          var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
+          if (!box) return;
+          box.className = 'ctrl-side ctrl-side-' + amountClass(totals, side);
+          setText(box.querySelector('[data-role="amt"]'), fmt(totals[side] || 0));
+          var btn = box.querySelector('.ctrl-force-btn');
+          if (btn) btn.disabled = !canForce;
+        });
+      } else {
+        g.sides.forEach(function (side) {
+          var box = card.querySelector('.ctrl-side[data-side="' + side + '"]');
+          if (!box) return;
+          var btn = box.querySelector('.ctrl-force-btn');
+          if (btn) btn.disabled = !canForce;
+        });
+      }
     });
 
-    // Live bets list
-    var lb = root.querySelector('[data-role="livebets"]');
-    if (lb) {
-      var rows = recentOpenBets(10);
-      if (!rows.length) {
-        setText(lb, 'No open bets yet \u2014 player bet lagate hi yahan dikhega');
-      } else {
-        lb.innerHTML = rows.map(function (b) {
-          var side = sideOfBet(b) || '?';
-          var gk = b.gameKey || b.type || '?';
-          var amt = fmt(b.amt || b.amount || 0);
-          var pl = b.player || b.playerId || '?';
-          return '<div class="ctrl-bet-row"><b>' + pl + '</b> \u2192 ' + side +
-            ' <span class="ctrl-bet-game">(' + gk + ')</span> \u00b7 <b>' + amt + '</b></div>';
-        }).join('');
-      }
-    }
-
-    var openCount = (cache.bets || []).filter(isOpenBet).length;
     setText(
       root.querySelector('[data-role="foot"]'),
       'Live \u00b7 ' +
         (cache.updated ? new Date(cache.updated).toLocaleTimeString() : '\u2014') +
-        ' \u00b7 open bets on server: ' + openCount
+        ' \u00b7 current-round chips only'
     );
   }
 
@@ -402,9 +369,10 @@
       cache.dataSig = '';
     }
 
-    // Always update amounts every poll (not only when phase changes)
-    cache.dataSig = dataSig();
-    updateCards(root, true);
+    var sig = dataSig();
+    var full = sig !== cache.dataSig;
+    if (full) cache.dataSig = sig;
+    updateCards(root, full);
   }
 
   function ensureStyles() {
@@ -441,10 +409,6 @@
       '.ctrl-force-btn{width:100%;margin-top:4px;padding:6px 4px;border:0;border-radius:6px;background:#b45309;color:#fff;font-size:10px;font-weight:800;cursor:pointer}',
       '.ctrl-force-btn:disabled{opacity:.4;cursor:not-allowed;background:#374151}',
       '.ctrl-phase-hint{margin-top:8px;font-size:10px;color:#6b7280;text-align:center}',
-      '.ctrl-livebets{margin-top:14px;padding:10px;border:1px solid #30363d;border-radius:8px;background:#0f172a}',
-      '.ctrl-livebets-title{font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:6px}',
-      '.ctrl-bet-row{font-size:11px;color:#d1d5db;padding:3px 0;border-bottom:1px solid #1f2937}',
-      '.ctrl-bet-game{color:#9ca3af}',
       '.ctrl-foot{margin-top:10px;font-size:10px;color:#6b7280;text-align:center}'
     ].join('');
     document.head.appendChild(s);
@@ -457,13 +421,14 @@
     installRenderDebounce();
     ensureRoot();
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(refresh, 1200);
+    pollTimer = setInterval(refresh, 1500);
     refresh();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 
+  // Re-install after app.js (in case render was redefined)
   setTimeout(installRenderDebounce, 200);
   setTimeout(installRenderDebounce, 800);
   setTimeout(installRenderDebounce, 2000);
@@ -472,7 +437,7 @@
     if (typeof window.go === 'function' && !window.go.__ctrlHook) {
       var _go = window.go;
       window.go = function (view) {
-        allowNextAdminRender = true;
+        allowNextAdminRender = true; // allow one full paint on navigation
         var r = _go.apply(this, arguments);
         setTimeout(function () {
           killLegacyController();
@@ -488,5 +453,5 @@
     }
   }, 300);
 
-  console.log('[AntPro] controller-fix v7 \u2014 live chips + bets');
+  console.log('[AntPro] controller-fix v6 \u2014 admin re-render blocked');
 })();

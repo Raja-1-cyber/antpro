@@ -1,0 +1,18 @@
+/* Screenshot reference UI — presentation only */
+.game-screen .stake-control{display:none!important}
+.game-screen .bet-lock-row.antpro-bet-trigger{cursor:pointer}
+.game-screen .bet-lock-row.antpro-bet-trigger:hover{filter:brightness(1.08)}
+.antpro-bet-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.56);display:flex;align-items:flex-start;justify-content:center;padding:20px 8px;box-sizing:border-box}
+.antpro-bet-modal{width:min(100%,562px);margin-top:0;background:#8fc9ec;color:#101010;box-shadow:0 8px 28px rgba(0,0,0,.55);font-family:Roboto,Arial,sans-serif}
+.antpro-bet-head{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center;padding:12px 14px 16px;background:#8fc9ec;font-size:17px;line-height:1.35}
+.antpro-bet-head span,.antpro-bet-head b{display:block}.antpro-bet-head b{font-size:18px;font-weight:500}
+.antpro-chip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 30px;padding:0 14px 12px;background:#8fc9ec}
+.antpro-chip-grid button{height:39px;border-radius:22px;border:1px solid #f4e08b;background:#8c6500;color:#fff;font-size:16px;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.2)}
+.antpro-chip-grid button:active{transform:scale(.98);background:#725100}
+.antpro-amount-row{display:flex;align-items:stretch;padding:0 12px 12px;background:#8fc9ec}
+.antpro-amount-row input{min-width:0;flex:1;height:44px;border:0;border-radius:2px 0 0 2px;padding:0 14px;background:#fff;color:#222;font-size:16px;outline:none}
+.antpro-amount-row input::placeholder{color:#bdbdbd}.antpro-amount-row span{width:66px;display:grid;place-items:center;background:#1f3542;color:#fff;font-size:16px}
+.antpro-modal-actions{display:grid;grid-template-columns:1fr 1fr}.antpro-modal-actions button{height:51px;border:0;color:#fff;font-size:18px;cursor:pointer}.antpro-cancel{background:#f10d0d}.antpro-submit{background:#009b08}.antpro-modal-actions button:active{filter:brightness(.88)}
+.game-screen .bet-lock-row{position:relative}.game-screen .bet-lock-row .antpro-rate{width:52px;text-align:center;color:#222;font-size:12px;font-weight:500;order:2}.game-screen .bet-lock-row .lock.antpro-bet-trigger{order:3;cursor:pointer;font-size:13px;font-weight:700}
+.game-screen .bet-lock-row .side.antpro-side-label{order:1}.game-screen .result-heading.antpro-result-head{font-size:13px;letter-spacing:.1px}.game-screen .last-result .result-dot{font-weight:800}
+@media(max-width:430px){.antpro-bet-overlay{padding:20px 7px}.antpro-chip-grid{gap:9px 12px;padding-left:12px;padding-right:12px}.antpro-chip-grid button{font-size:15px;height:38px}.antpro-bet-head{font-size:16px}.antpro-bet-head b{font-size:17px}}

@@ -9,7 +9,7 @@
   window.selectedStake = function (key) {
     var balance = typeof getCoins === 'function' ? getCoins() : 0;
     var saved = Number(state.selectedStakes[key]);
-    if (Number.isInteger(saved) && saved >= 100 && saved <= 20000) {
+    if (Number.isInteger(saved) && saved >= 100 && saved <= 200000) {
       if (balance <= 0 || saved <= balance) return saved;
     }
     return balance >= 100 ? 100 : 0;
@@ -32,14 +32,14 @@
     }
     var n = parseInt(raw, 10);
     if (!Number.isFinite(n) || n < 1) return;
-    if (n > 20000) n = 20000;
+    if (n > 200000) n = 200000;
     state.selectedStakes[key] = n;
     if (note) note.textContent = 'Selected bet: ' + n.toLocaleString() + ' coins';
   };
 
   window.setStake = function (key, value) {
     var balance = typeof getCoins === 'function' ? getCoins() : 20000;
-    var max = Math.min(20000, Math.max(100, balance || 20000));
+    var max = Math.min(200000, Math.max(100, balance || 200000));
     var n = parseInt(value, 10);
     if (!Number.isFinite(n) || n < 100) n = 100;
     if (n > max) n = max;
@@ -57,8 +57,8 @@
     var raw = (input && input.value) || state._stakeDraft[key] || state.selectedStakes[key] || 0;
     var n = parseInt(raw, 10);
     state._stakeTyping[key] = false;
-    if (!Number.isInteger(n) || n < 100 || n > 20000) {
-      if (typeof toast === 'function') toast('Bet amount 100 se 20,000 chips ke beech rakho');
+    if (!Number.isInteger(n) || n < 100 || n > 200000) {
+      if (typeof toast === 'function') toast('Bet amount 100 se 2,00,000 chips ke beech rakho');
       return 0;
     }
     if (typeof getCoins === 'function' && n > getCoins()) {
@@ -82,8 +82,9 @@
       draft = value ? String(value) : '';
     }
     // NO broken inline quotes — use data-stake-key + delegated events
+    var amounts = [100, 200, 500, 1000, 3000, 5000, 10000, 20000, 25000, 50000, 100000, 200000];
     return '<div class="stake-control">' +
-      '<label>BET AMOUNT<br><small>Min 100 · Balance: ' + balance.toLocaleString() + ' coins</small>' +
+      '<label>BET AMOUNT<br><small>Min 100 · Max 2,00,000 · Balance: ' + balance.toLocaleString() + ' coins</small>' +
       '<b id="stake-note-' + key + '" class="selected-stake-note">Selected bet: ' +
       (value ? value.toLocaleString() + ' coins' : 'type amount') + '</b></label>' +
       '<input id="stake-' + key + '" class="stake-amount-input" type="text" inputmode="numeric" ' +
@@ -91,10 +92,7 @@
       'value="' + String(draft).replace(/"/g, '') + '" ' +
       'placeholder="100" aria-label="Bet amount">' +
       '<div class="stake-chips" role="group" aria-label="Quick bet amount">' +
-      '<button type="button" data-stake-set="' + key + '" data-stake-amt="100">100</button>' +
-      '<button type="button" data-stake-set="' + key + '" data-stake-amt="500">500</button>' +
-      '<button type="button" data-stake-set="' + key + '" data-stake-amt="1000">1K</button>' +
-      '<button type="button" data-stake-set="' + key + '" data-stake-amt="5000">5K</button>' +
+      amounts.map(function (n) { return '<button type="button" data-stake-set="' + key + '" data-stake-amt="' + n + '">' + n.toLocaleString('en-IN') + '</button>'; }).join('') +
       '</div></div>';
   };
 
@@ -184,7 +182,9 @@
       '  border-radius:6px!important; box-sizing:border-box!important; z-index:5; position:relative;',
       '}',
       '.stake-control{position:relative;z-index:5;pointer-events:auto!important;}',
-      '.stake-chips button{pointer-events:auto!important;cursor:pointer;}'
+      '.stake-chips{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px!important;margin-top:6px!important;}',
+      '.stake-chips button{pointer-events:auto!important;cursor:pointer;min-width:0!important;padding:6px 2px!important;font-size:11px!important;line-height:1.1!important;white-space:nowrap!important;}',
+      '@media(max-width:430px){.stake-chips{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px!important}.stake-chips button{font-size:10px!important;padding:6px 1px!important;}}'
     ].join('');
     document.head.appendChild(st);
   }
