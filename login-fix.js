@@ -249,8 +249,8 @@
         state.welcome = true;
       }
 
-      if (typeof go === 'function') go('home');
-      else { state.view = 'home'; if (typeof render === 'function') render(); }
+      if (typeof go === 'function') go('rules');
+      else { state.view = 'rules'; if (typeof render === 'function') render(); }
 
       if (typeof toast === 'function') {
         toast((acc.role || 'player').toUpperCase() + ' login OK');
