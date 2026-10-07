@@ -1388,7 +1388,8 @@ function forcedAndarDeck(result,joker,deck){
   if(!result) return deck;
   const filler=deck.filter(c=>c.v!==joker.v);
   const match=makeCard(joker.v,joker.suit==='♠'?'♥':'♠');
-  filler.splice(Math.max(0,filler.length-1-(result==='Andar'?0:1)),0,match);
+  // reveal() consumes from the end: first card => last index, second => one before last.
+  filler.splice(Math.max(0,filler.length-(result==='Andar'?0:1)),0,match);
   return filler;
 }
 function casinoLastResult(history,fallback){
