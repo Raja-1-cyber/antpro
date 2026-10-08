@@ -157,6 +157,16 @@
   'use strict';
   if (window.__antproLegacyRoundTimer) clearInterval(window.__antproLegacyRoundTimer);
   if (window.__antproLegacyRoundSync) clearInterval(window.__antproLegacyRoundSync);
+  try {
+    if (window.tickRounds && window.tickRounds.timers) {
+      Object.keys(window.tickRounds.timers).forEach(function (k) { clearTimeout(window.tickRounds.timers[k]); });
+      window.tickRounds.timers = {};
+    }
+    if (window.scheduleNextRound && window.scheduleNextRound.timers) {
+      Object.keys(window.scheduleNextRound.timers).forEach(function (k) { clearTimeout(window.scheduleNextRound.timers[k]); });
+      window.scheduleNextRound.timers = {};
+    }
+  } catch (legacyTimerError) {}
   window.__antproLiveFixReady = true;
   var CFG = {'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:5},'teen-patti':{duration:20,lock:5},'dragon-tiger':{duration:15,lock:5}};
   var GAP_AB=4000, GAP_TEEN=4000, GAP_DT=5000, RESULT_HOLD=5000, RESULT_HOLD_DT=5000, RESULT_HOLD_TEEN=5000, RESULT_HOLD_L7=4000, L7_FLIP_DELAY=3000, roundSeen={}, runToken={};
