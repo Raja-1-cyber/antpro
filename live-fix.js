@@ -136,8 +136,9 @@
       '<div class="bet-lock-row"><div class="side">Team A</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('teen-patti','Team A') : 0) + '</div><div class="lock" onclick="playTeenPatti(\'Team A\')">' + (typeof lockLabel === 'function' ? lockLabel('teen-patti') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side">Team B</div><div class="amt">' + (typeof betAmountFor === 'function' ? betAmountFor('teen-patti','Team B') : 0) + '</div><div class="lock" onclick="playTeenPatti(\'Team B\')">' + (typeof lockLabel === 'function' ? lockLabel('teen-patti') : '🔒') + '</div></div>' +
       '<div class="bet-lock-row"><div class="side"></div><div class="amt"></div><div class="lock back-btn-g" onclick="go(\'casino\')">BACK</div></div></div>' +
-      (typeof previousResultsHTML === 'function' ? previousResultsHTML() : '') +
-      '<div class="completed-bets">Completed Casino Bets</div><div class="section-gold">My Bet</div>' +
+      '<div class="completed-bets">Completed Casino Bets</div><div class="section-gold result-heading"><span>Last Result</span><span>View All</span></div>' +
+      '<div class="last-result">' + ((state.tpHistory && state.tpHistory.length ? state.tpHistory : ['A','B','A','B','A','B','A','B','A','B']).slice(0,10).map(function (x) { return '<div class="result-dot">' + String(x)[0] + '</div>'; }).join('')) + '</div>' +
+      '<div class="section-gold">My Bet</div>' +
       '<table class="my-bet-table"><thead><tr><th>Name</th><th>Odds</th><th>Stake</th><th>P/L</th></tr></thead><tbody>' +
       (bets.length ? bets.map(function (x) { return '<tr><td>' + x.team + '</td><td>' + x.rate + '</td><td>' + x.amt + '</td><td>' + (x.result || x.profit) + '</td></tr>'; }).join('') : '<tr><td colspan="4" style="color:#555">—</td></tr>') +
       '</tbody></table></div>' + (typeof back === 'function' ? back() : '');
