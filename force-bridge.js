@@ -47,7 +47,8 @@
                 try { side = JSON.parse(init.body).side; } catch (e) {}
               }
               if (key && side) {
-                forceCache[key] = { side: side, until: Date.now() + 20000 };
+                var forcedRound = data.round || {};
+                forceCache[key] = { side: side, roundId: forcedRound.roundId || null, until: Date.now() + 120000 };
                 if (typeof state !== 'undefined') {
                   state.sharedRounds = state.sharedRounds || {};
                   state.sharedRounds[key] = Object.assign({}, state.sharedRounds[key] || {}, { forcedWinner: side, result: side });
@@ -72,9 +73,11 @@
         return res.clone().json().then(function (data) {
           if (!data || typeof data !== 'object') return res;
           Object.keys(forceCache).forEach(function (k) {
-            if (forceCache[k].until > Date.now() && data[k]) {
-              data[k].forcedWinner = forceCache[k].side;
-              if (data[k].phase === 'result' || data[k].phase === 'revealing') data[k].result = forceCache[k].side;
+            var cached = forceCache[k], live = data[k];
+            if (!live || (cached.roundId && live.roundId && cached.roundId !== live.roundId)) { delete forceCache[k]; return; }
+            if (cached.until > Date.now()) {
+              live.forcedWinner = cached.side;
+              if (live.phase === 'result' || live.phase === 'revealing') live.result = cached.side;
             }
           });
           try {
@@ -101,7 +104,9 @@
       }).then(function (data) {
         if (!data) return;
         Object.keys(forceCache).forEach(function (k) {
-          if (forceCache[k].until > Date.now() && data[k]) data[k].forcedWinner = forceCache[k].side;
+          var cached = forceCache[k], live = data[k];
+          if (!live || (cached.roundId && live.roundId && cached.roundId !== live.roundId)) { delete forceCache[k]; return; }
+          if (cached.until > Date.now()) live.forcedWinner = cached.side;
         });
         state.sharedRounds = data;
         try {

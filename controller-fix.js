@@ -170,7 +170,7 @@
       } else {
         if (data.round) cache.rounds[gameKey] = data.round;
         try {
-          if (window.__antproForceCache) window.__antproForceCache[gameKey] = { side: side, until: Date.now() + 20000 };
+          if (window.__antproForceCache) window.__antproForceCache[gameKey] = { side: side, roundId: data.round && data.round.roundId || null, until: Date.now() + 120000 };
         } catch (e1) {}
         if (typeof toast === 'function') toast(gameKey + ' → FORCE ' + side);
         await refresh();
