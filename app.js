@@ -783,7 +783,7 @@ function pageStatement(){
   }
   return `${topBtn()}
   <div class="view-title">CLIENT STATEMENT</div>
-  <div class="section-bar">ALL PLUS / MINUS ENTRIES</div>
+  <div class="section-bar">SETTLED BET PROFIT / LOSS</div>
   <table class="ledger-table">
     <thead><tr><th>TIME</th><th>USER</th><th>TYPE</th><th>NOTE</th><th>AMOUNT</th></tr></thead>
     <tbody>
