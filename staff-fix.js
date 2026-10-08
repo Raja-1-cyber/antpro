@@ -57,9 +57,12 @@
         });
       }
     } catch (e) {}
-    finally { staffBusy = false; }
+    finally {
+      staffBusy = false;
+      if (state.exposureUser && state.view === 'pnl' && typeof render === 'function') render();
+    }
   };
-  setInterval(function () { if (window.syncStaffBets) window.syncStaffBets(); }, 2000);
+  setInterval(function () { if (window.syncStaffBets) window.syncStaffBets(); }, 1000);
   setTimeout(function () { if (window.syncStaffBets) window.syncStaffBets(); }, 500);
 
   function allowSet() {
@@ -117,13 +120,13 @@
     var rows = bets.length ? bets.map(function (b) {
       var st = b.status === 'open' ? 'LIVE' : (b.status || '');
       return '<tr><td>' + (b.match || b.type || 'Casino') + '</td><td>' + (b.team || b.side || '—') +
-        '</td><td>' + (b.type || 'KHAI') + '</td><td>' + new Date(b.ts || Date.now()).toLocaleTimeString('en-IN') +
+        '</td><td>' + (Number(b.amt) || 0) + ' coins</td><td>' + (b.type || 'KHAI') + '</td><td>' + new Date(b.ts || Date.now()).toLocaleTimeString('en-IN') +
         '</td><td class="ok">LIVE</td></tr>';
-    }).join('') : '<tr><td colspan="5" class="empty-cell">No live bets for ' + id + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="empty-cell">No live bets for ' + id + '</td></tr>';
     return '<div class="modal-overlay" onclick="if(event.target===this)closeExposure()"><div class="staff-modal exposure-modal">' +
       '<button class="modal-x" onclick="closeExposure()">×</button><h3>USER EXPOSURE</h3>' +
       '<div class="modal-subtitle">' + u.id + ' · ' + (u.name || '') + ' · Live bets: ' + liveCount + '</div>' +
-      '<div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION</th><th>TYPE</th><th>TIME</th><th>STATUS</th></tr></thead><tbody>' +
+      '<div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION</th><th>STAKE (COINS)</th><th>TYPE</th><th>TIME</th><th>STATUS</th></tr></thead><tbody>' +
       rows + '</tbody></table></div><button class="back-btn" onclick="closeExposure()">CLOSE</button></div></div>';
   };
 

@@ -772,15 +772,14 @@ function pageBetHistory(){
 
 function pageStatement(){
   const role=(state.user&&state.user.role)||'player';
-  let list=loadStatements().slice(0,120);
+  let list=knownBets().filter(x=>['won','lost'].includes(String(x.status||'').toLowerCase())).slice(0,120);
   if(role==='player'){
     const id=state.user.id;
-    list=list.filter(x=>x.userId===id);
+    list=list.filter(x=>(x.player||x.playerId)===id);
   } else {
     const allow=new Set(allDownlinePlayerIds());
-    // also show own chip movements for agent/master
     allow.add(state.user.id);
-    list=list.filter(x=>allow.has(x.userId));
+    list=list.filter(x=>allow.has(x.player||x.playerId));
   }
   return `${topBtn()}
   <div class="view-title">CLIENT STATEMENT</div>
@@ -790,12 +789,13 @@ function pageStatement(){
     <tbody>
       ${list.length?list.map(e=>{
         const t=new Date(e.ts||Date.now()).toLocaleString('en-IN',{hour12:false});
-        const amt=Number(e.amount)||0;
+        const won=String(e.status||'').toLowerCase()==='won';
+        const amt=won?Number(e.profit)||0:-(Number(e.amt)||0);
         return `<tr>
           <td style="font-size:9px">${t}</td>
-          <td style="font-weight:700">${e.userId||'—'}</td>
+          <td style="font-weight:700">${e.player||e.playerId||'—'}</td>
           <td style="font-size:10px">${e.type||'—'}</td>
-          <td style="font-size:10px;text-align:left">${e.note||''}</td>
+          <td style="font-size:10px;text-align:left">${e.team||e.side||''} · ${e.result||e.status||''}</td>
           <td class="${amt>=0?'pos':'neg'}">${amt>0?'+':''}${amt}</td>
         </tr>`;
       }).join(''):'<tr><td colspan="5" style="color:#999">No statement lines yet</td></tr>'}
