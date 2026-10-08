@@ -47,7 +47,9 @@
       }
       if (results[1] && results[1].ok) {
         var live = await results[1].json();
-        state.staffLiveBets = (Array.isArray(live.bets) ? live.bets : []).map(function (b) {
+        state.staffLiveBets = (Array.isArray(live.bets) ? live.bets : []).filter(function (b) {
+          return ['open', 'pending'].indexOf(String(b.status || 'open').toLowerCase()) >= 0;
+        }).map(function (b) {
           var m = mapBet(b);
           m.status = 'open';
           m.result = 'LIVE';
@@ -102,7 +104,7 @@
   window.exposureModal = function (id) {
     var u = (typeof findUserById === 'function' ? findUserById(id) : null) || { id: id, name: id };
     var bets = (typeof visibleBetsForRole === 'function' ? visibleBetsForRole() : (state.activeBets || []))
-      .filter(function (b) { return (b.player || b.playerId) === id; })
+      .filter(function (b) { return (b.player || b.playerId) === id && ['open', 'pending'].indexOf(String(b.status || 'open').toLowerCase()) >= 0; })
       .slice(0, 50);
     Object.values(state.pendingBets || {}).forEach(function (arr) {
       (arr || []).forEach(function (b) {
@@ -115,15 +117,13 @@
     var rows = bets.length ? bets.map(function (b) {
       var st = b.status === 'open' ? 'LIVE' : (b.status || '');
       return '<tr><td>' + (b.match || b.type || 'Casino') + '</td><td>' + (b.team || b.side || '—') +
-        '</td><td>' + (b.amt || 0) + '</td><td>' + (b.rate || '—') + '</td><td>' + (b.type || 'KHAI') +
-        '</td><td>' + new Date(b.ts || Date.now()).toLocaleTimeString('en-IN') +
-        '</td><td class="bad">' + (b.status === 'lost' ? (b.amt || 0) : 0) +
-        '</td><td class="ok">' + (b.status === 'won' ? (b.profit || 0) : (b.status === 'open' ? 'LIVE' : 0)) + '</td></tr>';
-    }).join('') : '<tr><td colspan="8" class="empty-cell">No bets for ' + id + '</td></tr>';
+        '</td><td>' + (b.type || 'KHAI') + '</td><td>' + new Date(b.ts || Date.now()).toLocaleTimeString('en-IN') +
+        '</td><td class="ok">LIVE</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="empty-cell">No live bets for ' + id + '</td></tr>';
     return '<div class="modal-overlay" onclick="if(event.target===this)closeExposure()"><div class="staff-modal exposure-modal">' +
       '<button class="modal-x" onclick="closeExposure()">×</button><h3>USER EXPOSURE</h3>' +
-      '<div class="modal-subtitle">' + u.id + ' · ' + (u.name || '') + ' · Live: ' + liveCount + ' · All client bets</div>' +
-      '<div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION</th><th>STAKE</th><th>RATE</th><th>TYPE</th><th>TIME</th><th>LOSS</th><th>PROFIT</th></tr></thead><tbody>' +
+      '<div class="modal-subtitle">' + u.id + ' · ' + (u.name || '') + ' · Live bets: ' + liveCount + '</div>' +
+      '<div class="table-scroll"><table class="bo-table"><thead><tr><th>MATCH</th><th>SELECTION</th><th>TYPE</th><th>TIME</th><th>STATUS</th></tr></thead><tbody>' +
       rows + '</tbody></table></div><button class="back-btn" onclick="closeExposure()">CLOSE</button></div></div>';
   };
 
