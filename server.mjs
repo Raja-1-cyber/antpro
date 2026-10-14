@@ -203,6 +203,7 @@ function snapshot(){const out={};for(const key of Object.keys(GAME_DEFS))out[key
 function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger'],'win-go':['0','1','2','3','4','5','6','7','8','9']};return sides[key]?.includes(side)}
 function forceSideValid(key,side){if(key!=='win-go')return resultSideValid(key,side);return resultSideValid(key,side)||['Green','Red','Violet','Big','Small'].includes(String(side))}
 function winGoForceMatches(choice,winner){const n=Number(winner),s=String(choice);if(!Number.isInteger(n)||n<0||n>9)return false;if(/^\d$/.test(s))return n===Number(s);if(s==='Green')return [1,3,5,7,9].includes(n);if(s==='Red')return [0,2,4,6,8].includes(n);if(s==='Violet')return n===0||n===5;if(s==='Big')return n>=5;if(s==='Small')return n<=4;return false}
+function validateWinGoBet(body){const selection=String(body.selection||body.team||'');if(!forceSideValid('win-go',selection))return {error:'invalid Win Go selection',status:400};const amount=Number(body.amount??body.amt);if(!Number.isInteger(amount)||amount<1||amount>20000)return {error:'Win Go stake must be a whole number from 1 to 20,000 demo coins',status:400};const base=Number(body.baseStake||0),qty=Number(body.quantity||0),multi=Number(body.multiplier||0);if(base&&(![1,10,100,1000].includes(base)||!Number.isInteger(qty)||qty<1||qty>100||![1,5,10,20,50,100].includes(multi)||base*qty*multi!==amount))return {error:'invalid Win Go balance, quantity or multiplier',status:400};const r=currentRound('win-go');if(String(body.roundId)!==String(r.roundId))return {error:'bet belongs to an old Win Go round',status:409};if(r.phase!=='betting'||Number(r.betTimer||0)<=0)return {error:'Win Go betting is closed for this round',status:409};return {amount,fee:Math.floor(amount*.02),contractAmount:Math.floor(amount*.98)}}
 async function fetchCricket(){
   if(Date.now()-cricketCache.updated<30000&&cricketCache.matches.length)return cricketCache;
   const cricbuzz=await fetchCricbuzzLive();
@@ -265,7 +266,8 @@ const server=http.createServer(async(req,res)=>{const u=new URL(req.url,'http://
   if((u.pathname==='/api/live-bets'||u.pathname==='/api/bets-history')&&req.method==='GET')return json(res,200,{ok:true,bets:liveBets.slice(0,500)});
   if(u.pathname==='/api/live-bets'&&req.method==='POST'){
     const body=await readBody(req);if(!body.player||!body.gameKey||!body.roundId)return json(res,400,{ok:false,error:'gameKey, roundId and player required'});
-    const bet={...body,id:String(body.id||'B'+Date.now().toString(36).toUpperCase()),status:body.status||'open',ts:Number(body.ts)||Date.now()};
+    let normalized={};if(body.gameKey==='win-go'){normalized=validateWinGoBet(body);if(normalized.error)return json(res,normalized.status,{ok:false,error:normalized.error})}
+    const bet={...body,...(body.gameKey==='win-go'?normalized:{}),id:String(body.id||'B'+Date.now().toString(36).toUpperCase()),status:body.status||'open',ts:Number(body.ts)||Date.now()};
     liveBets=liveBets.filter(x=>x.id!==bet.id);liveBets.unshift(bet);persistBets();return json(res,200,{ok:true,bet});
   }
   if(u.pathname==='/api/bets-settle'&&req.method==='POST'){
