@@ -2074,7 +2074,7 @@ function admin(){
     </div></div>`;
   }
   const live=getGamesLive();
-  const games=[{key:'andar-bahar',name:'Andar Bahar',perm:true},{key:'lucky7',name:'Lucky 7',perm:true},{key:'teen-patti',name:'Teen Patti',perm:true},{key:'dragon-tiger',name:'Dragon Tiger',perm:true},{key:'virtual',name:'Virtual Games',perm:false}];
+  const games=[{key:'andar-bahar',name:'Andar Bahar',perm:true},{key:'lucky7',name:'Lucky 7',perm:true},{key:'teen-patti',name:'Teen Patti',perm:true},{key:'dragon-tiger',name:'Dragon Tiger',perm:true},{key:'win-go',name:'Win Go',perm:true},{key:'virtual',name:'Virtual Games',perm:false}];
   return `<div class="admin-panel">
     <div class="admin-top"><strong>NS Controller</strong><button onclick="adminLogout()" style="background:#30363d;color:#fff;border:0;padding:6px 10px;border-radius:4px">Logout</button></div>
     <div class="admin-section"><h4>MASTER GAME DECISION PANEL</h4>
@@ -2111,7 +2111,7 @@ function tryAdminLogin(){
 }
 function adminLogout(){state.adminAuthed=false;state.adminError='';sessionStorage.removeItem('antpro_admin_ok');render()}
 function toggleGame(key){
-  const PERMANENT = ['andar-bahar','lucky7','teen-patti','dragon-tiger'];
+  const PERMANENT = ['andar-bahar','lucky7','teen-patti','dragon-tiger','win-go'];
   if(PERMANENT.includes(key)){toast('Yeh game permanent hai — band nahi ho sakti');return;}
   const live=getGamesLive();
   live[key]=!(live[key]!==false);

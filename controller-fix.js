@@ -5,7 +5,8 @@
     { key: 'andar-bahar', title: 'Andar Bahar', sides: ['Andar', 'Bahar'], types: ['andarbahar', 'andar'] },
     { key: 'lucky7', title: 'Lucky 7', sides: ['7 UP', '7', '7 DOWN'], types: ['lucky7', 'lucky'] },
     { key: 'teen-patti', title: 'Teen Patti', sides: ['Team A', 'Team B'], types: ['teenpatti', 'teen'] },
-    { key: 'dragon-tiger', title: 'Dragon Tiger', sides: ['Dragon', 'Tie', 'Tiger'], types: ['dragontiger', 'dragon'] }
+    { key: 'dragon-tiger', title: 'Dragon Tiger', sides: ['Dragon', 'Tie', 'Tiger'], types: ['dragontiger', 'dragon'] },
+    { key: 'win-go', title: 'Win Go', sides: ['0','1','2','3','4','5','6','7','8','9'], types: ['wingo','wingo'] }
   ];
   var cache = { rounds: {}, bets: [], updated: 0 };
   var pollTimer = null;
