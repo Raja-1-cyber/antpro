@@ -173,7 +173,7 @@ function getCoins(){const v=localStorage.getItem(COINS_KEY);return v===null?200:
 function setCoins(n){localStorage.setItem(COINS_KEY,String(Math.max(0,Math.floor(n))))}
 function getGamesLive(){
   // Permanent games — always ON, master cannot disable
-  const PERMANENT = {'andar-bahar':true,'lucky7':true,'teen-patti':true,'dragon-tiger':true};
+  const PERMANENT = {'andar-bahar':true,'lucky7':true,'teen-patti':true,'dragon-tiger':true,'win-go':true};
   try{
     const stored = JSON.parse(localStorage.getItem(GAMES_KEY)||'{}');
     return {...{virtual:true}, ...stored, ...PERMANENT};
@@ -284,7 +284,7 @@ function getForced(gameKey){
   return r&&r.forcedWinner?r.forcedWinner:null;
 }
 const GAME_KEYS=['andar-bahar','lucky7','teen-patti','dragon-tiger'];
-const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:5},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:5}};
+const GAME_TIMINGS={'andar-bahar':{duration:30,lock:5},lucky7:{duration:15,lock:5},'teen-patti':{duration:20,lock:4},'dragon-tiger':{duration:15,lock:5},'win-go':{duration:30,lock:5}};
 const CARD_GAP_MS=2500, RESULT_HOLD_MS=2000, NEXT_ROUND_DELAY_MS=5000;
 function roundSeconds(key){
   const r=ensureRound(key);const elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);
@@ -1020,7 +1020,7 @@ function home(){
     {label:'IN PLAY',cls:'ic-inplay',asset:'inplay',view:'inplay'},
     {label:'GAMES',cls:'ic-games',asset:'games',view:'casino'},
     {label:'MATKA',cls:'ic-matka',asset:'matka',view:'matka'},
-    {label:'Aviator',cls:'ic-aviator',asset:'aviator',view:'aviator'},
+    {label:'WIN GO',cls:'ic-wingo',asset:'wingo',view:'wingo'},
     {label:'STATEMENT',cls:'ic-statement',asset:'statement',view:'ledger'},
     {label:'RULES',cls:'ic-rules',asset:'rules',view:'rules'},
     {label:'MY LEDGER',cls:'ic-ledger',asset:'ledger',view:'ledger'},
@@ -1028,7 +1028,7 @@ function home(){
   ];
   return `<div class="home-grid">${tiles.map(t=>`
     <div class="home-tile" onclick="go('${t.view}')">
-      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset}-4k.png" alt="${t.label}" loading="lazy" decoding="async"></div>
+      <div class="icon-wrap ${t.cls}"><img src="/assets/${t.asset==='wingo'?'wingo.svg':t.asset+'-4k.png'}" alt="${t.label}" loading="lazy" decoding="async"></div>
       <label>${t.label}</label>
     </div>`).join('')}</div>`;
 }
@@ -1319,7 +1319,7 @@ function match(){
 }
 function casino(){
   const live=getGamesLive();
-  const virtual=[['DUS KA DUM','virtual','dus-ka-dum','casino-ref-dus-ka-dum.png'],['ROULETTE','virtual','roulette','casino-ref-roulette.png'],['ANDAR BAHAR','andar','virtual-andar-bahar','casino-ref-virtual-andar-bahar.png']];
+  const virtual=[['WIN GO','wingo','win-go','wingo.svg'],['DUS KA DUM','virtual','dus-ka-dum','casino-ref-dus-ka-dum.png'],['ROULETTE','virtual','roulette','casino-ref-roulette.png'],['ANDAR BAHAR','andar','virtual-andar-bahar','casino-ref-virtual-andar-bahar.png']];
   const liveGames=[
     ['ANDAR BAHAR','andar','andar-bahar','live-andar-bahar','casino-ref-live-andar-bahar.png'],
     ['T20 TEEN PATTI','teenpatti','teen-patti','t20-teen-patti','casino-ref-t20-teen-patti.png'],
@@ -1333,7 +1333,7 @@ function casino(){
   <div class="casino-section">
     <h3>Virtual Casino</h3>
     <div class="casino-grid virtual-grid">${virtual.map(([n,v,a,file])=>`
-      <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':'toast(\'Coming soon\')'}">
+      <div class="casino-tile ${live.virtual!==false?'':'off'}" onclick="${v==='andar'?'go(\'andar\')':v==='wingo'?'go(\'wingo\')':'toast(\'Coming soon\')'}">
         <img class="casino-art" src="/assets/${file||`casino-${a}.svg`}" alt="${n}" loading="lazy" decoding="async">
       </div>`).join('')}</div>
     <h3>Live Casino</h3>
@@ -1545,7 +1545,6 @@ function playDragonTiger(side){
   setTimeout(()=>{state.dtDragon=dragon;render();setTimeout(()=>{state.dtTiger=tiger;state.dtSpin=false;render();setTimeout(()=>{const natural=cardRank(dragon)>cardRank(tiger)?'Dragon':cardRank(tiger)>cardRank(dragon)?'Tiger':'Tie',result=forcedAtBet||smartDecision(key,['Dragon','Tie','Tiger'],natural),won=side===result,profit=Math.round(amt*(rate-1));if(won)syncPlayerChips(getCoins()+amt+profit);state.dtHistory.unshift(result==='Dragon'?'D':result==='Tiger'?'T':'TIE');state.dtHistory=state.dtHistory.slice(0,30);pushSettledBet({team:side,type:'DRAGON TIGER',rate,amt,profit,player:(state.user&&state.user.id)||'Player',status:won?'won':'lost',result:won?'WON +'+(amt+profit):'LOST -'+amt});toast(won?side+' WON':'LOST · '+result);finishRound(key,result);render()},RESULT_HOLD_MS)},CARD_GAP_MS)},CARD_GAP_MS);
 }
 function matka(){return `${topBtn()}<div class="view-title">MATKA</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
-function aviator(){return `${topBtn()}<div class="view-title">AVIATOR</div><div style="padding:40px;text-align:center;color:#666">Coming soon</div>${back()}`}
 
 /* ===== LEDGER ===== */
 
@@ -2174,6 +2173,7 @@ function view(){
   if(state.view==='inplay')return shell(inplay());
   if(state.view==='match')return shell(match());
   if(state.view==='casino')return shell(casino());
+  if(state.view==='wingo'){if(typeof wingoInit==='function')wingoInit();return shell(typeof wingoView==='function'?wingoView():home());}
   if(state.view==='andar')return shell(andar());
   if(state.view==='lucky7')return shell(lucky7());
   if(state.view==='teenpatti')return shell(teenpatti());
@@ -2182,7 +2182,6 @@ function view(){
   if(state.view==='ledger')return shell(state.user&&state.user.role!=='player'?staffLedger():ledger());
   if(state.view==='password')return shell(password());
   if(state.view==='matka')return shell(matka());
-  if(state.view==='aviator')return shell(aviator());
   if(state.view==='pnl')return shell(pagePnL());
   if(state.view==='bethistory')return shell(pageBetHistory());
   if(state.view==='statement')return shell(state.user&&state.user.role!=='player'?staffTransactions():pageStatement());

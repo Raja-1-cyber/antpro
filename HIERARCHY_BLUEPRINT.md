@@ -54,7 +54,7 @@ Two-column circular icon grid:
 - In Play
 - Games
 - Matka
-- Aviator
+- Win Go
 - Statement
 - Rules
 - My Ledger

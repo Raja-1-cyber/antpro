@@ -15,7 +15,7 @@ const rawFirebaseDb=process.env.FIREBASE_DATABASE_URL||'https://antpro-live-defa
 const FIREBASE_DB=(rawFirebaseDb.match(/https?:\/\/[^\s\]\)\"']+/)||[rawFirebaseDb])[0].replace(/\/$/,'');
 fs.mkdirSync(dataDir,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.jpg':'image/jpeg','.png':'image/png'};
-const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:5,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:5,resultHold:5000}};
+const GAME_DEFS={'andar-bahar':{duration:30,lockSeconds:5,resultHold:5000},lucky7:{duration:15,lockSeconds:5,resultHold:4000},'teen-patti':{duration:20,lockSeconds:5,resultHold:5000},'dragon-tiger':{duration:15,lockSeconds:5,resultHold:5000},'win-go':{duration:30,lockSeconds:5,resultHold:5000}};
 const SPORT_SCORE_URL='https://sportscore.com/api/widget/matches/?sport=cricket&limit=20';
 const CRICBUZZ_LIVE_URL='https://www.cricbuzz.com/cricket-match/live-scores';
 let rounds={};try{rounds=JSON.parse(fs.readFileSync(roundsFile,'utf8'))||{}}catch{rounds={}}
@@ -200,7 +200,7 @@ function firebaseIsFresh(snapshot){
 function newRound(key,seconds=GAME_DEFS[key]?.duration||30){const def=GAME_DEFS[key]||{duration:seconds,lockSeconds:4};const previous=rounds[key]?.history;const r={gameKey:key,roundId:'R-'+Date.now().toString(36).toUpperCase(),phase:'betting',timer:def.duration,duration:def.duration,lockSeconds:def.lockSeconds,forcedWinner:null,startedAt:Date.now(),history:Array.isArray(previous)?previous.slice(0,10):[]};rounds[key]=r;persist();return r}
 function currentRound(key){const def=GAME_DEFS[key]||{duration:30,lockSeconds:4,resultHold:7000};let r=rounds[key];if(!r||Number(r.duration)!==def.duration||Number(r.lockSeconds)!==def.lockSeconds)r=newRound(key,def.duration);let elapsed=Math.floor((Date.now()-(r.startedAt||Date.now()))/1000);let lockAt=Math.max(0,def.duration-def.lockSeconds);if(r.phase==='betting'&&elapsed>=lockAt){r.phase='locked';r.timer=Math.max(0,def.duration-elapsed);r.lockedAt=r.startedAt+lockAt*1000;persist()}if(r.phase==='locked'&&elapsed>=def.duration){r.timer=0;r.betTimer=0}if(r.phase==='result'&&Date.now()-(r.resultAt||r.startedAt||0)>=(def.resultHold??7000)){r=newRound(key,def.duration);elapsed=0;lockAt=Math.max(0,def.duration-def.lockSeconds)}r.duration=def.duration;r.lockSeconds=def.lockSeconds;r.timer=Math.max(0,def.duration-elapsed);r.betTimer=Math.max(0,lockAt-elapsed);return r}
 function snapshot(){const out={};for(const key of Object.keys(GAME_DEFS))out[key]={...currentRound(key)};return out}
-function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger']};return sides[key]?.includes(side)}
+function resultSideValid(key,side){const sides={'andar-bahar':['Andar','Bahar'],lucky7:['7 UP','7','7 DOWN'],'teen-patti':['Team A','Team B'],'dragon-tiger':['Dragon','Tie','Tiger'],'win-go':['0','1','2','3','4','5','6','7','8','9']};return sides[key]?.includes(side)}
 async function fetchCricket(){
   if(Date.now()-cricketCache.updated<30000&&cricketCache.matches.length)return cricketCache;
   const cricbuzz=await fetchCricbuzzLive();
